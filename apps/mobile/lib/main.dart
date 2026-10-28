@@ -6,9 +6,11 @@ import 'app_state.dart';
 import 'data/sighting_store.dart';
 import 'data/species_guide.dart';
 import 'screens/guide_screen.dart';
+import 'screens/login_screen.dart';
 import 'screens/map_screen.dart';
 import 'screens/queue_screen.dart';
 import 'screens/settings_screen.dart';
+import 'services/auth_service.dart';
 import 'services/location_service.dart';
 import 'services/settings.dart';
 import 'services/sync_service.dart';
@@ -17,10 +19,13 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final settings = await Settings.load();
   final store = await SightingStore.open();
+  final auth = AuthService();
+  await auth.load();
   final state = AppState(
     store: store,
     settings: settings,
-    sync: SyncService(store, settings),
+    auth: auth,
+    sync: SyncService(store, settings, auth),
     guide: await SpeciesGuide.load(),
     location: LocationService(),
   );
@@ -42,7 +47,21 @@ class BioSphereFieldApp extends StatelessWidget {
       title: 'BioSphere Field',
       theme: theme(Brightness.light),
       darkTheme: theme(Brightness.dark),
-      home: const HomeShell(),
+      home: const _AuthGate(),
+    );
+  }
+}
+
+/// Signing in needs a connection once; after that the app works offline for the token's lifetime.
+class _AuthGate extends StatelessWidget {
+  const _AuthGate();
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = AppScope.of(context).auth;
+    return ListenableBuilder(
+      listenable: auth,
+      builder: (context, _) => auth.session == null ? const LoginScreen() : const HomeShell(),
     );
   }
 }

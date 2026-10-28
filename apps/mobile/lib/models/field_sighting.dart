@@ -21,6 +21,9 @@ class FieldSighting {
   final DateTime timestamp;
   final DateTime? syncedAt;
 
+  /// Account that recorded the sighting; only that account uploads it.
+  final String? ownerId;
+
   FieldSighting({
     String? id,
     required this.speciesName,
@@ -35,6 +38,7 @@ class FieldSighting {
     this.habitatNotes,
     this.photoPath,
     this.syncedAt,
+    this.ownerId,
   }) : id = id ?? const Uuid().v4();
 
   bool get isSynced => syncedAt != null;
@@ -76,6 +80,7 @@ class FieldSighting {
         'photo_path': photoPath,
         'observed_at': timestamp.toUtc().millisecondsSinceEpoch,
         'synced_at': syncedAt?.millisecondsSinceEpoch,
+        'owner_id': ownerId,
       };
 
   factory FieldSighting.fromRow(Map<String, Object?> r) => FieldSighting(
@@ -94,5 +99,6 @@ class FieldSighting {
         syncedAt: r['synced_at'] == null
             ? null
             : DateTime.fromMillisecondsSinceEpoch(r['synced_at'] as int, isUtc: true),
+        ownerId: r['owner_id'] as String?,
       );
 }

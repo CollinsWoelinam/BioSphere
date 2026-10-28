@@ -2,8 +2,10 @@
  * Deterministic synthetic dataset for the Greater Serengeti–Mara ecosystem.
  * Re-running replaces previous seed rows (device_id = 'seed') and leaves real data alone.
  */
+import type { Role } from "./auth.js";
 import { sql } from "./db.js";
 import { ingestObservations } from "./ingest.js";
+import { createUser, EmailTakenError } from "./users.js";
 import type { ObservationFeature } from "./schemas.js";
 
 // mulberry32: small seeded PRNG so every run produces the same dataset.
@@ -149,11 +151,40 @@ for (let day = 0; day < DAYS; day++) {
   });
 }
 
+// 7. Black rhino (sensitive) – small, heavily monitored population around Moru Kopjes.
+//    Citizen accounts only ever see these snapped to an ~11 km grid.
+for (let day = 0; day < DAYS; day += 4) {
+  add("Diceros bicornis", [34.78 + gauss() * 0.03, -2.74 + gauss() * 0.025], day, {
+    observer_type: "RANGER",
+    individual_count: 1 + Math.floor(rand() * 2),
+    habitat_notes: rand() < 0.2 ? "Browsing in thicket below the kopje" : null,
+  });
+}
+
+/** Local-development accounts, one per role. Never run the seed against production. */
+const DEMO_PASSWORD = "biosphere-dev";
+const DEMO_USERS: { email: string; name: string; role: Role }[] = [
+  { email: "admin@biosphere.local", name: "Ada Admin", role: "ADMIN" },
+  { email: "researcher@biosphere.local", name: "Rehema Researcher", role: "RESEARCHER" },
+  { email: "ranger@biosphere.local", name: "Rafiki Ranger", role: "RANGER" },
+  { email: "citizen@biosphere.local", name: "Chris Citizen", role: "CITIZEN" },
+];
+
 async function seed() {
+  if (process.env.NODE_ENV === "production") throw new Error("Refusing to seed a production database");
+  for (const u of DEMO_USERS) {
+    try {
+      await createUser(sql, { ...u, password: DEMO_PASSWORD });
+    } catch (err) {
+      if (!(err instanceof EmailTakenError)) throw err;
+    }
+  }
+  console.log(`demo accounts: ${DEMO_USERS.map((u) => u.email).join(", ")} (password: ${DEMO_PASSWORD})`);
+
   const deleted = await sql`DELETE FROM species_observations WHERE device_id = 'seed'`;
   let inserted = 0;
   for (let i = 0; i < features.length; i += 1000) {
-    const result = await ingestObservations(sql, features.slice(i, i + 1000));
+    const result = await ingestObservations(sql, features.slice(i, i + 1000), null);
     inserted += result.inserted.length;
   }
   console.log(`removed ${deleted.count} old seed rows, inserted ${inserted} observations`);

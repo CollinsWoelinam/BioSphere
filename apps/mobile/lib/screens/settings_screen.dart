@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../app_state.dart';
-import '../models/field_sighting.dart';
 import '../services/offline_tiles.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -39,6 +38,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _signOut() async {
+    final app = AppScope.of(context);
+    final pending = app.sync.pending;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: Text(pending == 0
+            ? 'You will need a connection to sign in again.'
+            : '$pending sightings have not been uploaded. They stay on this device and upload the next time you sign in.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Sign out')),
+        ],
+      ),
+    );
+    if (ok == true) await app.auth.signOut();
+  }
+
   Future<void> _importMap() async {
     final app = AppScope.of(context);
     final messenger = ScaffoldMessenger.of(context);
@@ -66,6 +84,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
+        if (app.auth.session case final s?)
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.account_circle_outlined),
+              title: Text(s.name),
+              subtitle: Text('${s.email} · ${s.role.toLowerCase()}'),
+              trailing: TextButton(onPressed: _signOut, child: const Text('Sign out')),
+            ),
+          ),
+        const SizedBox(height: 16),
         Text('Server', style: t.titleSmall),
         const SizedBox(height: 8),
         TextField(
@@ -80,17 +108,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(width: 12),
           if (_testResult != null) Expanded(child: Text(_testResult!, style: t.bodySmall)),
         ]),
-        const Divider(height: 40),
-        Text('Default observer', style: t.titleSmall),
-        const SizedBox(height: 8),
-        SegmentedButton<ObserverType>(
-          segments: const [
-            ButtonSegment(value: ObserverType.ranger, label: Text('Ranger')),
-            ButtonSegment(value: ObserverType.citizen, label: Text('Citizen scientist')),
-          ],
-          selected: {app.settings.observerType},
-          onSelectionChanged: (s) => setState(() => app.settings.observerType = s.first),
-        ),
         const Divider(height: 40),
         Text('Offline map', style: t.titleSmall),
         const SizedBox(height: 4),

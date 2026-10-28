@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import {
   api,
+  seesExactLocations,
   toSighting,
+  type SessionUser,
   type FrontierProps,
   type HullComparison,
   type HullProps,
@@ -48,7 +50,7 @@ export type DensityFC = FeatureCollection<Polygon, { sightings: number; individu
   max_sightings: number;
 };
 
-export function Workspace() {
+export function Workspace({ user, onSignOut }: { user: SessionUser; onSignOut: () => void }) {
   const mode = useColorMode();
   const [species, setSpecies] = useState<Species[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
@@ -84,6 +86,16 @@ export function Workspace() {
   const [cellKm, setCellKm] = useState(4);
   const [liveConnected, setLiveConnected] = useState(false);
   const [liveIds, setLiveIds] = useState<Set<string>>(new Set());
+
+  /**
+   * Species this viewer may run spatial analyses on. Citizens see sensitive species only
+   * as generalised points, and the API refuses analyses that would reveal their range.
+   */
+  const analysable = useMemo(() => {
+    if (seesExactLocations(user)) return selected;
+    const sensitive = new Set(species.filter((s) => s.is_sensitive).map((s) => s.species_name));
+    return selected.filter((n) => !sensitive.has(n));
+  }, [selected, species, user]);
 
   /** Fixed categorical slot per species (alphabetical), so colors never repaint on filter. */
   const colorIndex = useMemo(() => new Map(species.map((s, i) => [s.species_name, i])), [species]);
@@ -205,14 +217,14 @@ export function Workspace() {
     setHullBusy(true);
     try {
       const range = hullOptions.scope === "window" ? { from: iso(windowStart), to: iso(cursor + 1) } : {};
-      setHulls(await api.homeRange({ species: selected, ...range }, hullOptions));
+      setHulls(await api.homeRange({ species: analysable, ...range }, hullOptions));
       setLayers((l) => ({ ...l, hull: true }));
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setHullBusy(false);
     }
-  }, [hullOptions, selected, windowStart, cursor]);
+  }, [hullOptions, analysable, windowStart, cursor]);
 
   const runCompare = useCallback(
     async (req: CompareRequest) => {
@@ -230,11 +242,14 @@ export function Workspace() {
   );
 
   const invasiveSelected = useMemo(
-    () => selected.filter((n) => species.find((s) => s.species_name === n)?.is_invasive),
-    [selected, species],
+    () => analysable.filter((n) => species.find((s) => s.species_name === n)?.is_invasive),
+    [analysable, species],
   );
   // Plants don't migrate: invasive spread is shown by the frontier layer instead.
-  const mobileSelected = useMemo(() => selected.filter((n) => !invasiveSelected.includes(n)), [selected, invasiveSelected]);
+  const mobileSelected = useMemo(
+    () => analysable.filter((n) => !species.find((s) => s.species_name === n)?.is_invasive),
+    [analysable, species],
+  );
 
   useEffect(() => {
     if (!layers.trajectory || !mobileSelected.length) {
@@ -252,11 +267,11 @@ export function Workspace() {
   }, [layers.frontier, invasiveSelected]);
 
   // Hex density: throttled to one request in flight, always converging on the latest window.
-  const densityKey = layers.hex && selected.length ? `${selected.join("|")}:${Math.floor(windowStart / DAY)}:${Math.floor(cursor / DAY)}:${cellKm}` : "";
+  const densityKey = layers.hex && analysable.length ? `${analysable.join("|")}:${Math.floor(windowStart / DAY)}:${Math.floor(cursor / DAY)}:${cellKm}` : "";
   const densityInFlight = useRef(false);
   const densityPending = useRef<string | null>(null);
-  const densityParams = useRef({ selected, windowStart, cursor, cellKm });
-  densityParams.current = { selected, windowStart, cursor, cellKm };
+  const densityParams = useRef({ analysable, windowStart, cursor, cellKm });
+  densityParams.current = { analysable, windowStart, cursor, cellKm };
   const fetchDensity = useCallback(() => {
     if (densityInFlight.current) {
       densityPending.current = "pending";
@@ -265,7 +280,7 @@ export function Workspace() {
     densityInFlight.current = true;
     const p = densityParams.current;
     api
-      .density({ species: p.selected, from: iso(p.windowStart), to: iso(p.cursor + 1) }, p.cellKm)
+      .density({ species: p.analysable, from: iso(p.windowStart), to: iso(p.cursor + 1) }, p.cellKm)
       .then(setDensity)
       .catch(() => {})
       .finally(() => {
@@ -295,6 +310,9 @@ export function Workspace() {
   return (
     <div className="workspace">
       <Sidebar
+        user={user}
+        onSignOut={onSignOut}
+        analysable={analysable}
         mode={mode}
         species={species}
         selected={selected}

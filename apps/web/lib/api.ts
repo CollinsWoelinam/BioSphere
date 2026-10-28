@@ -2,9 +2,39 @@ import type { Feature, FeatureCollection, Point, Polygon, MultiPolygon, Geometry
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
+export type Role = "ADMIN" | "RESEARCHER" | "RANGER" | "CITIZEN";
+export interface SessionUser {
+  id: string;
+  email: string;
+  name: string;
+  role: Role;
+}
+export interface Session {
+  token: string;
+  user: SessionUser;
+}
+
+/** Citizens see sensitive species generalised and cannot analyse them. */
+export const seesExactLocations = (u: SessionUser) => u.role !== "CITIZEN";
+
+let token: string | null = null;
+let onUnauthorized: () => void = () => {};
+
+export function configureAuth(t: string | null, handler: () => void) {
+  token = t;
+  onUnauthorized = handler;
+}
+
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
 export interface Species {
   species_name: string;
   is_invasive: boolean;
+  is_sensitive: boolean;
   sightings: number;
   first_seen: string;
   last_seen: string;
@@ -19,6 +49,8 @@ export interface ObservationProps {
   accuracy_m: number | null;
   individual_count: number;
   habitat_notes: string | null;
+  /** True when the location was snapped to a coarse grid for this viewer. */
+  generalized?: boolean;
 }
 export type Observation = Feature<Point, ObservationProps> & { id: string };
 
@@ -92,14 +124,32 @@ function qs(params: Record<string, string | number | undefined | string[]>) {
   return u.toString();
 }
 
-async function get<T>(path: string, params: Parameters<typeof qs>[0] = {}, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(`${API_URL}${path}?${qs(params)}`, { signal });
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: {
+      ...(init.body ? { "content-type": "application/json" } : {}),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...init.headers,
+    },
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `${res.status} ${res.statusText}`);
+    if (res.status === 401 && token) onUnauthorized();
+    throw new ApiError(body.error ?? `${res.status} ${res.statusText}`, res.status);
   }
   return res.json();
 }
+
+const get = <T,>(path: string, params: Parameters<typeof qs>[0] = {}, signal?: AbortSignal) =>
+  request<T>(`${path}?${qs(params)}`, { signal });
+
+export const auth = {
+  login: (email: string, password: string) =>
+    request<Session>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  register: (name: string, email: string, password: string) =>
+    request<Session>("/auth/register", { method: "POST", body: JSON.stringify({ name, email, password }) }),
+};
 
 export const api = {
   species: () => get<Species[]>("/species"),
@@ -129,7 +179,7 @@ export const api = {
     ),
   frontier: (f: Filter) =>
     get<FeatureCollection<Polygon | MultiPolygon, FrontierProps>>("/analysis/invasive-frontier", { ...f, bucket: "month" }),
-  liveUrl: () => API_URL.replace(/^http/, "ws") + "/ws",
+  liveUrl: () => `${API_URL.replace(/^http/, "ws")}/ws?token=${encodeURIComponent(token ?? "")}`,
 };
 
 export function toSighting(f: Observation): Sighting {

@@ -26,7 +26,6 @@ class _LogSightingScreenState extends State<LogSightingScreen> {
   final _formKey = GlobalKey<FormState>();
   final _species = TextEditingController();
   final _notes = TextEditingController();
-  late ObserverType _observer;
   bool _invasive = false;
   int _count = 1;
   String? _photoPath;
@@ -43,7 +42,6 @@ class _LogSightingScreenState extends State<LogSightingScreen> {
     super.didChangeDependencies();
     if (_initialised) return;
     _initialised = true;
-    _observer = AppScope.of(context).settings.observerType;
     if (widget.initialSpecies != null) _pickSpecies(widget.initialSpecies!);
     _acquireFix();
   }
@@ -84,10 +82,12 @@ class _LogSightingScreenState extends State<LogSightingScreen> {
     setState(() => _saving = true);
     final app = AppScope.of(context);
     final guideEntry = app.guide.byScientificName(_species.text.trim());
+    final session = app.auth.session!;
     await app.save(FieldSighting(
       speciesName: guideEntry?.scientificName ?? _species.text.trim(),
       isInvasive: _invasive,
-      observerType: _observer,
+      observerType: session.observerType,
+      ownerId: session.userId,
       latitude: _fix!.latitude,
       longitude: _fix!.longitude,
       accuracyM: _fix!.accuracy,
@@ -181,13 +181,11 @@ class _LogSightingScreenState extends State<LogSightingScreen> {
             IconButton.filledTonal(onPressed: () => setState(() => _count++), icon: const Icon(Icons.add)),
           ]),
           const SizedBox(height: 16),
-          SegmentedButton<ObserverType>(
-            segments: const [
-              ButtonSegment(value: ObserverType.ranger, label: Text('Ranger'), icon: Icon(Icons.badge_outlined)),
-              ButtonSegment(value: ObserverType.citizen, label: Text('Citizen'), icon: Icon(Icons.person_outline)),
-            ],
-            selected: {_observer},
-            onSelectionChanged: (s) => setState(() => _observer = s.first),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(app.auth.session!.observerType == ObserverType.ranger ? Icons.badge_outlined : Icons.person_outline),
+            title: Text('Recorded by ${app.auth.session!.name}'),
+            subtitle: Text(app.auth.session!.role.toLowerCase()),
           ),
           const SizedBox(height: 16),
           TextFormField(

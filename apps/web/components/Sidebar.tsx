@@ -2,13 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
-import type { FrontierProps, HullComparison, HullProps, Species, Trajectory } from "@/lib/api";
+import { seesExactLocations, type FrontierProps, type HullComparison, type HullProps, type SessionUser, type Species, type Trajectory } from "@/lib/api";
 import { speciesColorHex, type Mode } from "@/lib/colors";
 import { fmtDate, fmtNum } from "@/lib/format";
 import type { Basemap } from "./MapView";
 import type { CompareRequest, HullOptions, LayerToggles } from "./Workspace";
 
 interface Props {
+  user: SessionUser;
+  onSignOut: () => void;
+  /** Selected species this viewer may analyse (excludes sensitive ones for citizens). */
+  analysable: string[];
   mode: Mode;
   species: Species[];
   selected: string[];
@@ -65,6 +69,14 @@ export function Sidebar(p: Props) {
         </span>
       </header>
 
+      <div className="account">
+        <span>
+          {p.user.name}
+          <span className="role">{p.user.role}</span>
+        </span>
+        <button className="link" onClick={p.onSignOut}>Sign out</button>
+      </div>
+
       <Section title="Species" aside={
         <span className="link-row">
           <button className="link" onClick={() => p.onSelectedChange(p.species.map((s) => s.species_name))}>All</button>
@@ -79,12 +91,20 @@ export function Sidebar(p: Props) {
                 <span className={`swatch${s.is_invasive ? " ring" : ""}`} style={{ background: swatch(s.species_name) }} aria-hidden />
                 <span className="species-name"><i>{s.species_name}</i></span>
                 {s.is_invasive && <span className="tag">Invasive</span>}
+                {s.is_sensitive && (
+                  <span className="tag sensitive" title="Locations protected from public view">Sensitive</span>
+                )}
                 <span className="count">{fmtNum(s.sightings)}</span>
               </label>
             </li>
           ))}
           {!p.species.length && <li className="muted">No species loaded yet.</li>}
         </ul>
+        {!seesExactLocations(p.user) && p.species.some((s) => s.is_sensitive) && (
+          <p className="notice">
+            Sensitive species are shown at ~11 km resolution and are left out of hulls, vectors and density.
+          </p>
+        )}
       </Section>
 
       <Section title="Map layers">
@@ -141,7 +161,7 @@ export function Sidebar(p: Props) {
           <button role="radio" aria-checked={p.hullOptions.scope === "window"} className={p.hullOptions.scope === "window" ? "on" : ""} onClick={() => p.onHullOptionsChange({ ...p.hullOptions, scope: "window" })}>Current window</button>
           <button role="radio" aria-checked={p.hullOptions.scope === "all"} className={p.hullOptions.scope === "all" ? "on" : ""} onClick={() => p.onHullOptionsChange({ ...p.hullOptions, scope: "all" })}>All time</button>
         </div>
-        <button className="primary" onClick={p.onComputeHulls} disabled={p.hullBusy || !p.selected.length}>
+        <button className="primary" onClick={p.onComputeHulls} disabled={p.hullBusy || !p.analysable.length}>
           {p.hullBusy ? "Computing…" : "Compute home ranges"}
         </button>
         {p.hulls && (
@@ -225,8 +245,8 @@ function CompareSection(p: Props) {
     setRange({ a_from: isoDay(d0), a_to: isoDay(d0 + (d1 - d0) / 3), b_from: isoDay(mid + (d1 - d0) / 6), b_to: isoDay(d1 + 86_400_000) });
   }, [d0, d1, mid]);
   useEffect(() => {
-    if (!p.selected.includes(species)) setSpecies(p.selected[0] ?? "");
-  }, [p.selected, species]);
+    if (!p.analysable.includes(species)) setSpecies(p.analysable[0] ?? "");
+  }, [p.analysable, species]);
 
   const c = p.comparison;
   const changeClass = useMemo(() => (c?.change_percent == null ? "" : c.change_percent >= 0 ? "up" : "down"), [c]);
@@ -237,7 +257,7 @@ function CompareSection(p: Props) {
       <label className="field">
         Species
         <select value={species} onChange={(e) => setSpecies(e.target.value)}>
-          {p.selected.map((s) => <option key={s} value={s}>{s}</option>)}
+          {p.analysable.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
       </label>
       <div className="period-grid">

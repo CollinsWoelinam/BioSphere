@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { sql } from "../db.js";
-import { whereObservations } from "../filters.js";
+import type { Viewer } from "../auth.js";
+import { assertMayAnalyse, whereObservations } from "../filters.js";
 import { bucket, corePercent, observationFilter, pctConvex, type ObservationFilter } from "../schemas.js";
 
 const hullParams = z.object({
@@ -16,11 +17,11 @@ type HullParams = z.infer<typeof hullParams>;
  * distance from their species centroid so `core` < 100 drops the outermost outliers
  * before the hull is built (e.g. core=95 gives the standard MCP95 home range).
  */
-function hullSubquery(f: ObservationFilter, p: HullParams) {
+function hullSubquery(f: ObservationFilter, p: HullParams, viewer: Viewer) {
   const hull = p.method === "convex" ? sql`ST_ConvexHull(g)` : sql`ST_ConcaveHull(g, ${p.pct})`;
   return sql`
     WITH filtered AS (
-      SELECT species_name, location FROM species_observations ${whereObservations(sql, f)}
+      SELECT species_name, location FROM species_observations ${whereObservations(sql, f, viewer)}
     ),
     centroids AS (
       SELECT species_name, ST_Centroid(ST_Collect(location)) AS c FROM filtered GROUP BY species_name
@@ -49,13 +50,14 @@ export async function analysisRoutes(app: FastifyInstance) {
   /** Home range polygon (MCP or concave/alpha-shape hull) per species. */
   app.get("/analysis/home-range", async (req) => {
     const q = observationFilter.extend(hullParams.shape).parse(req.query);
+    await assertMayAnalyse(sql, req.user, q.species);
     const rows = await sql`
       SELECT species_name, n AS sightings,
         ${geojson("hull")} AS geometry,
         ${areaKm2("hull")} AS area_sq_km,
         ST_Perimeter(hull::geography) / 1e3 AS perimeter_km,
         ${areaKm2("ST_ConvexHull(g)")} AS mcp_area_sq_km
-      FROM (${hullSubquery(q, q)}) h
+      FROM (${hullSubquery(q, q, req.user)}) h
       ORDER BY species_name
     `;
     return {
@@ -83,9 +85,10 @@ export async function analysisRoutes(app: FastifyInstance) {
       })
       .parse(req.query);
     const base = { species: [q.species] };
+    await assertMayAnalyse(sql, req.user, base.species);
     const [row] = await sql`
-      WITH a AS (${hullSubquery({ ...base, from: q.a_from, to: q.a_to }, q)}),
-           b AS (${hullSubquery({ ...base, from: q.b_from, to: q.b_to }, q)})
+      WITH a AS (${hullSubquery({ ...base, from: q.a_from, to: q.a_to }, q, req.user)}),
+           b AS (${hullSubquery({ ...base, from: q.b_from, to: q.b_to }, q, req.user)})
       SELECT a.n AS a_sightings, b.n AS b_sightings,
         ${geojson("a.hull")} AS a_geometry, ${areaKm2("a.hull")} AS a_area_sq_km,
         ${geojson("b.hull")} AS b_geometry, ${areaKm2("b.hull")} AS b_area_sq_km,
@@ -109,13 +112,14 @@ export async function analysisRoutes(app: FastifyInstance) {
   /** Chronological centroid displacement vectors per species, for migration animation. */
   app.get("/analysis/trajectory", async (req) => {
     const q = observationFilter.extend({ bucket }).parse(req.query);
+    await assertMayAnalyse(sql, req.user, q.species);
     const rows = await sql`
       WITH buckets AS (
         SELECT species_name, date_trunc(${q.bucket}, observed_at) AS t,
           count(*) AS sightings, sum(individual_count) AS individuals,
           ST_Centroid(ST_Collect(location)) AS c
         FROM species_observations
-        ${whereObservations(sql, q)}
+        ${whereObservations(sql, q, req.user)}
         GROUP BY 1, 2
       ),
       seq AS (
@@ -154,11 +158,12 @@ export async function analysisRoutes(app: FastifyInstance) {
     const q = observationFilter
       .extend({ cell_km: z.coerce.number().min(0.1).max(100).default(3) })
       .parse(req.query);
+    await assertMayAnalyse(sql, req.user, q.species);
     const rows = await sql`
       WITH pts AS (
         SELECT ST_Transform(location, 3857) AS m, individual_count
         FROM species_observations
-        ${whereObservations(sql, q)}
+        ${whereObservations(sql, q, req.user)}
       ),
       ext AS (
         SELECT ST_SetSRID(ST_Expand(ST_Extent(m)::geometry, 1000), 3857) AS e,
@@ -186,11 +191,12 @@ export async function analysisRoutes(app: FastifyInstance) {
   /** Cumulative concave-hull frontier per time step, showing how an infestation spreads. */
   app.get("/analysis/invasive-frontier", async (req) => {
     const q = observationFilter.extend({ bucket: bucket.default("month"), pct: pctConvex }).parse(req.query);
+    await assertMayAnalyse(sql, req.user, q.species);
     const filter = { ...q, invasive: q.species?.length ? q.invasive : (q.invasive ?? true) };
     const rows = await sql`
       WITH f AS (
         SELECT species_name, location, observed_at FROM species_observations
-        ${whereObservations(sql, filter)}
+        ${whereObservations(sql, filter, req.user)}
       ),
       steps AS (
         SELECT DISTINCT species_name, date_trunc(${q.bucket}, observed_at) AS t FROM f

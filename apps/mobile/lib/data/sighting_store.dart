@@ -13,7 +13,10 @@ class SightingStore {
     final dbPath = path ?? p.join(await getDatabasesPath(), 'biosphere_field.db');
     final db = await openDatabase(
       dbPath,
-      version: 1,
+      version: 2,
+      onUpgrade: (db, from, _) async {
+        if (from < 2) await db.execute('ALTER TABLE sightings ADD COLUMN owner_id TEXT');
+      },
       onCreate: (db, _) async {
         await db.execute('''
           CREATE TABLE sightings (
@@ -29,7 +32,8 @@ class SightingStore {
             habitat_notes TEXT,
             photo_path TEXT,
             observed_at INTEGER NOT NULL,
-            synced_at INTEGER
+            synced_at INTEGER,
+            owner_id TEXT
           )''');
         await db.execute('CREATE INDEX idx_sightings_pending ON sightings (synced_at, observed_at)');
       },
@@ -45,18 +49,26 @@ class SightingStore {
     return rows.map(FieldSighting.fromRow).toList();
   }
 
-  Future<List<FieldSighting>> pending({int limit = 200}) async {
+  /// Unsynced sightings recorded by [ownerId]. Rows from before accounts existed
+  /// (no owner) are uploaded by whoever signs in next.
+  Future<List<FieldSighting>> pending({required String ownerId, int limit = 200}) async {
     final rows = await _db.query(
       'sightings',
-      where: 'synced_at IS NULL',
+      where: 'synced_at IS NULL AND (owner_id = ? OR owner_id IS NULL)',
+      whereArgs: [ownerId],
       orderBy: 'observed_at ASC',
       limit: limit,
     );
     return rows.map(FieldSighting.fromRow).toList();
   }
 
-  Future<int> pendingCount() async =>
-      Sqflite.firstIntValue(await _db.rawQuery('SELECT COUNT(*) FROM sightings WHERE synced_at IS NULL')) ?? 0;
+  Future<int> pendingCount({String? ownerId}) async => Sqflite.firstIntValue(await _db.rawQuery(
+        ownerId == null
+            ? 'SELECT COUNT(*) FROM sightings WHERE synced_at IS NULL'
+            : 'SELECT COUNT(*) FROM sightings WHERE synced_at IS NULL AND (owner_id = ? OR owner_id IS NULL)',
+        [?ownerId],
+      )) ??
+      0;
 
   Future<void> markSynced(Iterable<String> ids, DateTime at) async {
     final list = ids.toList();
