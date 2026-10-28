@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../data/sighting_store.dart';
+import 'auth_service.dart';
 import 'settings.dart';
 
 /// Uploads the offline queue to the BioSphere API.
@@ -15,13 +16,21 @@ import 'settings.dart';
 /// on a periodic timer. Batches are idempotent server-side (client UUIDs), so a
 /// batch that times out after the server committed it is simply re-sent and
 /// reported back as duplicates, which are marked synced too.
+///
+/// Only the signed-in account's sightings are uploaded. If the server rejects
+/// the token (expired after a long field trip), uploads pause without retrying
+/// and the queue is kept until the user signs in again.
 class SyncService extends ChangeNotifier {
-  SyncService(this._store, this._settings, {http.Client? client, Connectivity? connectivity})
+  SyncService(this._store, this._settings, this._auth, {http.Client? client, Connectivity? connectivity})
       : _client = client ?? http.Client(),
-        _connectivity = connectivity ?? Connectivity();
+        _connectivity = connectivity ?? Connectivity() {
+    _auth.addListener(_onAuthChanged);
+  }
 
   final SightingStore _store;
   final Settings _settings;
+  final AuthService _auth;
+  String? _lastUserId;
   final http.Client _client;
   final Connectivity _connectivity;
 
@@ -54,20 +63,34 @@ class SyncService extends ChangeNotifier {
   bool _isOnline(List<ConnectivityResult> r) => r.any((c) => c != ConnectivityResult.none);
 
   Future<void> refreshPending() async {
-    pending = await _store.pendingCount();
+    pending = await _store.pendingCount(ownerId: _auth.session?.userId);
     notifyListeners();
+  }
+
+  void _onAuthChanged() {
+    final userId = _auth.session?.userId;
+    if (userId == _lastUserId) return;
+    _lastUserId = userId;
+    refreshPending();
+    if (userId != null) syncNow();
   }
 
   /// Returns the number of sightings confirmed by the server.
   Future<int> syncNow() async {
+    final session = _auth.session;
     if (syncing) return 0;
+    if (session == null || _auth.sessionExpired) {
+      lastError = 'Sign in to upload ${pending > 0 ? '$pending queued sightings' : 'sightings'}';
+      notifyListeners();
+      return 0;
+    }
     syncing = true;
     lastError = null;
     notifyListeners();
     var confirmed = 0;
     try {
       while (true) {
-        final batch = await _store.pending(limit: batchSize);
+        final batch = await _store.pending(ownerId: session.userId, limit: batchSize);
         if (batch.isEmpty) break;
         final body = jsonEncode({
           'type': 'FeatureCollection',
@@ -76,10 +99,11 @@ class SyncService extends ChangeNotifier {
         final res = await _client
             .post(
               Uri.parse('${_settings.apiUrl}/observations'),
-              headers: {'content-type': 'application/json'},
+              headers: {'content-type': 'application/json', 'authorization': 'Bearer ${session.token}'},
               body: body,
             )
             .timeout(const Duration(seconds: 30));
+        if (res.statusCode == 401) throw _SessionExpired();
         if (res.statusCode != 200 && res.statusCode != 201) {
           throw http.ClientException('Server responded ${res.statusCode}: ${res.body}');
         }
@@ -91,6 +115,10 @@ class SyncService extends ChangeNotifier {
       }
       lastSyncAt = DateTime.now();
       _failures = 0;
+    } on _SessionExpired {
+      // Retrying cannot help until the user signs in again; keep the queue.
+      _auth.markExpired();
+      lastError = 'Session expired. Sign in again to upload queued sightings.';
     } catch (e) {
       lastError = e is TimeoutException ? 'Upload timed out' : e.toString();
       _scheduleRetry();
@@ -113,6 +141,7 @@ class SyncService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _auth.removeListener(_onAuthChanged);
     _sub?.cancel();
     _timer?.cancel();
     _retry?.cancel();
@@ -120,3 +149,5 @@ class SyncService extends ChangeNotifier {
     super.dispose();
   }
 }
+
+class _SessionExpired implements Exception {}

@@ -1,47 +1,147 @@
 // Integration tests: run against the dev database (`pnpm db:up && pnpm db:migrate`).
-// Each test writes rows under a unique species name and removes them afterwards.
+// Each run uses unique species/user names and removes everything it created.
 import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
+import type { Role } from "../src/auth.js";
 import { buildApp } from "../src/app.js";
 import { sql } from "../src/db.js";
+import { createUser } from "../src/users.js";
 
-const SPECIES = `Testus ${randomUUID().slice(0, 8)}`;
+const RUN = randomUUID().slice(0, 8);
+const SPECIES = `Testus ${RUN}`;
+const SENSITIVE = `Secretus ${RUN}`;
+const PASSWORD = "test-password-123";
 let app: FastifyInstance;
+const tokens = {} as Record<Role, string>;
 
-const point = (lon: number, lat: number, day: number, id = randomUUID()) => ({
+const point = (lon: number, lat: number, day: number, species = SPECIES, id = randomUUID()) => ({
   type: "Feature",
   geometry: { type: "Point", coordinates: [lon, lat] },
-  properties: { id, species: SPECIES, timestamp: `2026-01-${String(day).padStart(2, "0")}T12:00:00Z` },
+  properties: { id, species, timestamp: `2026-01-${String(day).padStart(2, "0")}T12:00:00Z` },
 });
+
+const as = (role: Role) => ({ authorization: `Bearer ${tokens[role]}` });
+const get = (role: Role, url: string) => app.inject({ url, headers: as(role) });
+const post = (role: Role, url: string, payload: unknown) => app.inject({ method: "POST", url, payload, headers: as(role) });
 
 before(async () => {
   process.env.LOG_LEVEL = "silent";
   app = await buildApp();
+  for (const role of ["ADMIN", "RANGER", "CITIZEN"] as Role[]) {
+    const email = `${role.toLowerCase()}-${RUN}@test.local`;
+    await createUser(sql, { email, name: role, role, password: PASSWORD });
+    const res = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password: PASSWORD } });
+    tokens[role] = res.json().token;
+  }
+  await sql`INSERT INTO species (species_name, is_sensitive) VALUES (${SENSITIVE}, TRUE)`;
 });
+
 after(async () => {
-  await sql`DELETE FROM species_observations WHERE species_name = ${SPECIES}`;
+  await sql`DELETE FROM species_observations WHERE species_name IN (${SPECIES}, ${SENSITIVE})`;
+  await sql`DELETE FROM species WHERE species_name IN (${SPECIES}, ${SENSITIVE})`;
+  await sql`DELETE FROM users WHERE email LIKE ${"%-" + RUN + "@test.local"}`;
   await app.close();
   await sql.end();
+});
+
+describe("auth", () => {
+  test("data endpoints require a token", async () => {
+    assert.equal((await app.inject({ url: "/observations" })).statusCode, 401);
+    assert.equal((await app.inject({ url: "/observations", headers: { authorization: "Bearer junk" } })).statusCode, 401);
+  });
+
+  test("wrong password is rejected", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: `ranger-${RUN}@test.local`, password: "nope" },
+    });
+    assert.equal(res.statusCode, 401);
+  });
+
+  test("self-registration always yields a CITIZEN, whatever role is requested", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: `self-${RUN}@test.local`, name: "Self", password: PASSWORD, role: "ADMIN" },
+    });
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.json().user.role, "CITIZEN");
+  });
+
+  test("only admins can create staff accounts", async () => {
+    const payload = { email: `staff-${RUN}@test.local`, name: "Staff", password: PASSWORD, role: "RANGER" };
+    assert.equal((await post("CITIZEN", "/auth/users", payload)).statusCode, 403);
+    assert.equal((await post("ADMIN", "/auth/users", payload)).statusCode, 201);
+  });
 });
 
 describe("POST /observations", () => {
   test("ingests a FeatureCollection and is idempotent on client ids", async () => {
     const fc = { type: "FeatureCollection", features: [point(35, -2, 1), point(35.1, -2, 2)] };
-    const first = await app.inject({ method: "POST", url: "/observations", payload: fc });
+    const first = await post("RANGER", "/observations", fc);
     assert.equal(first.statusCode, 201);
     assert.equal(first.json().accepted.length, 2);
 
-    const retry = await app.inject({ method: "POST", url: "/observations", payload: fc });
+    const retry = await post("RANGER", "/observations", fc);
     assert.equal(retry.statusCode, 200);
     assert.deepEqual(retry.json().accepted, []);
     assert.equal(retry.json().duplicates.length, 2);
   });
 
+  test("observer type comes from the account, not the request body", async () => {
+    const f = point(35, -2, 3);
+    (f.properties as Record<string, unknown>).observer_type = "RANGER";
+    await post("CITIZEN", "/observations", f);
+    const [row] = await sql`SELECT observer_type, observer_id FROM species_observations WHERE id = ${f.properties.id}`;
+    assert.equal(row.observer_type, "CITIZEN");
+    assert.ok(row.observer_id);
+  });
+
   test("rejects out-of-range coordinates", async () => {
-    const res = await app.inject({ method: "POST", url: "/observations", payload: point(200, 0, 1) });
-    assert.equal(res.statusCode, 400);
+    assert.equal((await post("RANGER", "/observations", point(200, 0, 1))).statusCode, 400);
+  });
+});
+
+describe("sensitive species", () => {
+  before(async () => {
+    const features = [0, 1, 2, 3, 4].map((i) => point(34.7812 + i * 0.003, -2.7433 - i * 0.002, 1 + i, SENSITIVE));
+    (features[0].properties as Record<string, unknown>).habitat_notes = "At the north waterhole";
+    await post("RANGER", "/observations", { type: "FeatureCollection", features });
+  });
+
+  test("rangers see exact locations", async () => {
+    const res = await get("RANGER", `/observations?species=${encodeURIComponent(SENSITIVE)}`);
+    const f = res.json().features;
+    assert.equal(f.length, 5);
+    assert.equal(f[0].geometry.coordinates[0], 34.7812);
+    assert.equal(f[0].properties.habitat_notes, "At the north waterhole");
+  });
+
+  test("citizens see grid-snapped locations with notes and accuracy removed", async () => {
+    const res = await get("CITIZEN", `/observations?species=${encodeURIComponent(SENSITIVE)}`);
+    const f = res.json().features;
+    const exact = (await get("RANGER", `/observations?species=${encodeURIComponent(SENSITIVE)}`)).json().features;
+    assert.equal(f.length, 5);
+    for (const [i, x] of f.entries()) {
+      for (const [k, c] of x.geometry.coordinates.entries()) {
+        assert.ok(Math.abs(c * 10 - Math.round(c * 10)) < 1e-9, `${c} is not on the 0.1° grid`);
+        assert.ok(Math.abs(c - exact[i].geometry.coordinates[k]) <= 0.05 + 1e-9, "snapped to the nearest cell");
+      }
+      assert.equal(x.properties.generalized, true);
+      assert.equal(x.properties.habitat_notes, null);
+      assert.equal(x.properties.accuracy_m, null);
+    }
+  });
+
+  test("citizens cannot run spatial analyses on sensitive species", async () => {
+    const q = `species=${encodeURIComponent(SENSITIVE)}`;
+    for (const path of ["/analysis/home-range", "/analysis/trajectory", "/analysis/density"]) {
+      assert.equal((await get("CITIZEN", `${path}?${q}`)).statusCode, 403, path);
+    }
+    assert.equal((await get("RANGER", `/analysis/home-range?${q}`)).statusCode, 200);
   });
 });
 
@@ -53,11 +153,11 @@ describe("analysis", () => {
     for (let i = 0; i <= 10; i++) features.push(point(35, -2 + i * 0.01, 3 + (i % 20)));
     for (let i = 0; i <= 10; i++) features.push(point(35 + i * 0.01, -1.995, 3 + (i % 20)));
     for (let i = 0; i <= 10; i++) features.push(point(35.005, -2 + i * 0.01, 3 + (i % 20)));
-    await app.inject({ method: "POST", url: "/observations", payload: { type: "FeatureCollection", features } });
+    await post("RANGER", "/observations", { type: "FeatureCollection", features });
   });
 
   test("concave home range is tighter than the minimum convex polygon", async () => {
-    const res = await app.inject({ url: `/analysis/home-range?species=${encodeURIComponent(SPECIES)}&pct=0.2` });
+    const res = await get("RANGER", `/analysis/home-range?species=${encodeURIComponent(SPECIES)}&pct=0.2`);
     assert.equal(res.statusCode, 200);
     const [f] = res.json().features;
     assert.ok(f.properties.area_sq_km > 0);
@@ -65,13 +165,13 @@ describe("analysis", () => {
   });
 
   test("convex method equals the MCP area", async () => {
-    const res = await app.inject({ url: `/analysis/home-range?species=${encodeURIComponent(SPECIES)}&method=convex` });
+    const res = await get("RANGER", `/analysis/home-range?species=${encodeURIComponent(SPECIES)}&method=convex`);
     const [f] = res.json().features;
     assert.ok(Math.abs(f.properties.area_sq_km - f.properties.mcp_area_sq_km) < 1e-6);
   });
 
   test("trajectory returns displacement between chronological buckets", async () => {
-    const res = await app.inject({ url: `/analysis/trajectory?species=${encodeURIComponent(SPECIES)}&bucket=day` });
+    const res = await get("RANGER", `/analysis/trajectory?species=${encodeURIComponent(SPECIES)}&bucket=day`);
     const [tr] = res.json().species;
     assert.equal(tr.steps[0].from_position, null);
     assert.ok(tr.steps.length > 1);
@@ -79,7 +179,7 @@ describe("analysis", () => {
   });
 
   test("density bins every sighting into hex cells", async () => {
-    const res = await app.inject({ url: `/analysis/density?species=${encodeURIComponent(SPECIES)}&cell_km=0.5` });
+    const res = await get("RANGER", `/analysis/density?species=${encodeURIComponent(SPECIES)}&cell_km=0.5`);
     const total = res.json().features.reduce((n: number, f: { properties: { sightings: number } }) => n + Number(f.properties.sightings), 0);
     const [{ count }] = await sql`SELECT count(*)::int AS count FROM species_observations WHERE species_name = ${SPECIES}`;
     assert.equal(total, count);
@@ -93,7 +193,6 @@ describe("analysis", () => {
       b_from: "2026-01-01T00:00:00Z",
       b_to: "2026-02-01T00:00:00Z",
     });
-    const res = await app.inject({ url: `/analysis/home-range/compare?${q}` });
-    assert.equal(res.statusCode, 422);
+    assert.equal((await get("RANGER", `/analysis/home-range/compare?${q}`)).statusCode, 422);
   });
 });

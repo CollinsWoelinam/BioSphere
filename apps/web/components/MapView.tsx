@@ -289,7 +289,9 @@ function tooltip(info: PickingInfo) {
           ["Observed", new Date(s.t).toLocaleString()],
           ["Count", fmtNum(s.individual_count)],
           ["Observer", s.observer_type.toLowerCase()],
-          ["GPS accuracy", s.accuracy_m != null ? `±${fmtNum(s.accuracy_m, 1)} m` : "–"],
+          s.generalized
+            ? ["Location", "Generalised to ~11 km (sensitive species)"]
+            : ["GPS accuracy", s.accuracy_m != null ? `±${fmtNum(s.accuracy_m, 1)} m` : "–"],
           ...(s.is_invasive ? ([["Status", "Invasive"]] as [string, string][]) : []),
           ...(s.habitat_notes ? ([["Notes", s.habitat_notes]] as [string, string][]) : []),
         ],

@@ -1,25 +1,30 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import rateLimit from "@fastify/rate-limit";
 import websocket from "@fastify/websocket";
 import { ZodError } from "zod";
+import { authPlugin, type Viewer } from "./auth.js";
 import { config } from "./config.js";
 import { sql } from "./db.js";
 import { addClient } from "./live.js";
 import { analysisRoutes } from "./routes/analysis.js";
+import { authRoutes } from "./routes/auth.js";
 import { observationRoutes } from "./routes/observations.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? "info" }, bodyLimit: 10 * 1024 * 1024 });
 
   await app.register(cors, { origin: config.corsOrigin });
+  await app.register(rateLimit, { global: false });
   await app.register(websocket);
+  await app.register(authPlugin);
 
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof ZodError) {
       return reply.code(400).send({ error: "Invalid request", issues: err.issues });
     }
-    app.log.error(err);
     const status = (err as { statusCode?: number }).statusCode ?? 500;
+    if (status >= 500) app.log.error(err);
     return reply.code(status).send({ error: status < 500 ? (err as Error).message : "Internal error" });
   });
 
@@ -28,9 +33,24 @@ export async function buildApp() {
     return { status: "ok", postgis };
   });
 
-  app.get("/ws", { websocket: true }, (socket) => addClient(socket));
+  await app.register(authRoutes);
 
-  await app.register(observationRoutes);
-  await app.register(analysisRoutes);
+  // Browsers cannot set headers on a WebSocket, so the token travels as ?token=.
+  app.get("/ws", { websocket: true }, (socket, req) => {
+    const token = (req.query as { token?: string }).token;
+    try {
+      addClient(socket, app.jwt.verify<Viewer>(token ?? ""));
+    } catch {
+      socket.close(4401, "Authentication required");
+    }
+  });
+
+  // Everything below requires a signed-in user.
+  await app.register(async (secured) => {
+    secured.addHook("onRequest", secured.authenticate);
+    await secured.register(observationRoutes);
+    await secured.register(analysisRoutes);
+  });
+
   return app;
 }

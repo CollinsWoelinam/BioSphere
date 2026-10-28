@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
-import '../models/field_sighting.dart';
 
 class Settings extends ChangeNotifier {
   Settings._(this._prefs);
@@ -19,13 +18,6 @@ class Settings extends ChangeNotifier {
   String get apiUrl => _prefs.getString('apiUrl') ?? defaultApiUrl;
   set apiUrl(String v) {
     _prefs.setString('apiUrl', v.trim().replaceAll(RegExp(r'/+$'), ''));
-    notifyListeners();
-  }
-
-  ObserverType get observerType =>
-      ObserverType.values.byName(_prefs.getString('observerType') ?? ObserverType.ranger.name);
-  set observerType(ObserverType v) {
-    _prefs.setString('observerType', v.name);
     notifyListeners();
   }
 

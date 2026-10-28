@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'data/sighting_store.dart';
 import 'data/species_guide.dart';
 import 'models/field_sighting.dart';
+import 'services/auth_service.dart';
 import 'services/location_service.dart';
 import 'services/offline_tiles.dart';
 import 'services/settings.dart';
@@ -13,6 +14,7 @@ class AppState extends ChangeNotifier {
   AppState({
     required this.store,
     required this.settings,
+    required this.auth,
     required this.sync,
     required this.guide,
     required this.location,
@@ -22,6 +24,7 @@ class AppState extends ChangeNotifier {
 
   final SightingStore store;
   final Settings settings;
+  final AuthService auth;
   final SyncService sync;
   final SpeciesGuide guide;
   final LocationService location;
