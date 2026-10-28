@@ -1,0 +1,189 @@
+[
+  {
+    "scientific_name": "Connochaetes taurinus",
+    "common_name": "Blue wildebeest",
+    "group": "Mammal",
+    "status": "leastConcern",
+    "summary": "Keystone grazer of the Serengeti–Mara; over a million animals follow the rains in a clockwise annual migration.",
+    "identification": [
+      "Slate-grey to silver body with dark vertical stripes on the neck and flanks",
+      "Black beard and mane; both sexes carry curved, cow-like horns",
+      "Sloping back: shoulders noticeably higher than the hindquarters",
+      "Usually in large herds; calving peak Jan–Mar on the southern short-grass plains"
+    ],
+    "habitat": "Open short-grass plains and acacia savanna, close to water.",
+    "lookalikes": ["Hartebeest (lighter tan, no stripes)", "Topi (purple-black thigh patches)"],
+    "field_action": "Estimate herd size in bands of 10/50/100. Note river crossings and calving sites."
+  },
+  {
+    "scientific_name": "Equus quagga",
+    "common_name": "Plains zebra",
+    "group": "Mammal",
+    "status": "nearThreatened",
+    "summary": "Moves with and slightly ahead of the wildebeest migration, cropping taller grass.",
+    "identification": [
+      "Broad black-and-white stripes that extend under the belly",
+      "Faint 'shadow stripes' between the black stripes on the haunches",
+      "Erect mane; stocky horse-like build",
+      "Family groups of a stallion with several mares and foals"
+    ],
+    "habitat": "Grasslands and open woodland; never far from water.",
+    "lookalikes": ["Grévy's zebra (narrow stripes, white belly; not in this ecosystem)"],
+    "field_action": "Record group size and foals present."
+  },
+  {
+    "scientific_name": "Loxodonta africana",
+    "common_name": "African savanna elephant",
+    "group": "Mammal",
+    "status": "endangered",
+    "summary": "Largest land mammal and an ecosystem engineer that shapes woodland and grassland balance.",
+    "identification": [
+      "Very large ears shaped like the African continent",
+      "Concave back; two finger-like tips at the end of the trunk",
+      "Both sexes usually carry tusks",
+      "Matriarchal herds; adult bulls often alone or in bachelor groups"
+    ],
+    "habitat": "Savanna, riverine forest and escarpment woodland; seasonal movement to water.",
+    "lookalikes": [],
+    "field_action": "Keep at least 50 m away. Record herd composition and any injuries, snares or carcasses immediately."
+  },
+  {
+    "scientific_name": "Panthera leo",
+    "common_name": "Lion",
+    "group": "Mammal",
+    "status": "vulnerable",
+    "summary": "Social apex predator living in prides with defended territories.",
+    "identification": [
+      "Tawny, unpatterned coat; black tail tuft",
+      "Adult males have a mane, which darkens with age",
+      "Round ears with black backs",
+      "Usually seen resting in groups during the day"
+    ],
+    "habitat": "Open plains and woodland edge, often near kopjes and water.",
+    "lookalikes": ["Cheetah (spotted, slender, black tear lines)", "Leopard (rosettes, solitary)"],
+    "field_action": "Photograph whisker-spot patterns to identify individuals. Report collared animals with their collar ID."
+  },
+  {
+    "scientific_name": "Giraffa tippelskirchi",
+    "common_name": "Masai giraffe",
+    "group": "Mammal",
+    "status": "endangered",
+    "summary": "Tallest browser; its population fell by about half over three generations.",
+    "identification": [
+      "Jagged, star- or vine-leaf-shaped dark patches",
+      "Patches extend down the legs to the hooves",
+      "Two to three ossicones; males bald on top"
+    ],
+    "habitat": "Acacia–Commiphora woodland and wooded grassland.",
+    "lookalikes": ["Reticulated giraffe (smooth-edged polygons; not in this ecosystem)"],
+    "field_action": "Photograph the left flank square-on for pattern-based individual ID."
+  },
+  {
+    "scientific_name": "Diceros bicornis",
+    "common_name": "Black rhinoceros",
+    "group": "Mammal",
+    "status": "criticallyEndangered",
+    "summary": "Browsing rhino reduced to small, intensively protected populations.",
+    "identification": [
+      "Pointed, prehensile upper lip used for browsing",
+      "Two horns; head usually held up",
+      "Smaller ears than the white rhino; no shoulder hump",
+      "Calf runs behind its mother (in front in white rhino)"
+    ],
+    "habitat": "Dense bush, thickets and woodland edges.",
+    "lookalikes": ["White rhino (square lip, prominent hump; grazes)"],
+    "field_action": "Do not approach. Report the sighting to the rhino monitoring unit by radio. Do not share locations publicly."
+  },
+  {
+    "scientific_name": "Lycaon pictus",
+    "common_name": "African wild dog",
+    "group": "Mammal",
+    "status": "endangered",
+    "summary": "Highly social, wide-ranging pack hunter; one of Africa's most endangered carnivores.",
+    "identification": [
+      "Mottled coat of black, tan, yellow and white, unique to each animal",
+      "Large rounded ears",
+      "White-tipped bushy tail",
+      "Packs of 6–20; very active at dawn and dusk"
+    ],
+    "habitat": "Open plains and woodland; packs range over hundreds of km².",
+    "lookalikes": ["Spotted hyena (sloping back, small rounded spots)"],
+    "field_action": "Photograph both flanks of every individual. Report denning behaviour immediately."
+  },
+  {
+    "scientific_name": "Gyps rueppelli",
+    "common_name": "Rüppell's vulture",
+    "group": "Bird",
+    "status": "criticallyEndangered",
+    "summary": "High-flying scavenger collapsing because of poisoning and loss of nesting cliffs.",
+    "identification": [
+      "Scaly-looking plumage: dark feathers with pale edges",
+      "Yellowish bill; long, sparsely feathered neck",
+      "In flight, rows of white spots on the underwing coverts"
+    ],
+    "habitat": "Open savanna; nests colonially on cliffs and gorges.",
+    "lookalikes": ["White-backed vulture (plainer brown, dark bill)"],
+    "field_action": "Multiple dead vultures may indicate poisoning. Do not touch carcasses; report immediately."
+  },
+  {
+    "scientific_name": "Lantana camara",
+    "common_name": "Lantana",
+    "group": "Plant",
+    "status": "invasive",
+    "summary": "Aggressive ornamental escapee forming dense, toxic thickets that displace native grazing.",
+    "identification": [
+      "Square, prickly stems; scrambling shrub 1–3 m tall",
+      "Rough, toothed leaves with a pungent smell when crushed",
+      "Flat-topped clusters of small flowers that change colour (yellow→orange→pink)",
+      "Glossy black berries in clusters"
+    ],
+    "habitat": "Disturbed ground, lodge gardens, drainage lines and woodland edges.",
+    "lookalikes": ["Native Lippia (no prickles, aromatic, white-pink flowers)"],
+    "field_action": "Map the infestation edge, not just its centre. Estimate cover (%) in the notes."
+  },
+  {
+    "scientific_name": "Parthenium hysterophorus",
+    "common_name": "Parthenium weed",
+    "group": "Plant",
+    "status": "invasive",
+    "summary": "Fast-spreading annual that is toxic to livestock and causes dermatitis; spreads along roads.",
+    "identification": [
+      "Deeply lobed, pale-green leaves forming a basal rosette",
+      "Many small white flower heads, about 4 mm across, each with 5 tiny 'petals'",
+      "Upright plant 0.5–1.5 m tall with hairy, grooved stems"
+    ],
+    "habitat": "Roadsides, gravel pits, overgrazed and disturbed soil.",
+    "lookalikes": ["Native Bidens (yellow flowers)", "Wild carrot (umbels)"],
+    "field_action": "Wear gloves; do not pull plants that are flowering. Log the furthest plant along each road."
+  },
+  {
+    "scientific_name": "Opuntia stricta",
+    "common_name": "Erect prickly pear",
+    "group": "Plant",
+    "status": "invasive",
+    "summary": "Cactus spread by baboons and elephants; its spines injure wildlife mouths and feet.",
+    "identification": [
+      "Flat, oval, blue-green pads (cladodes)",
+      "Few long yellowish spines; tufts of fine glochids",
+      "Yellow flowers; purple-red pear-shaped fruit"
+    ],
+    "habitat": "Dry rocky slopes, kopjes and degraded rangeland.",
+    "lookalikes": ["Euphorbia candelabrum (native, ribbed stems, milky latex)"],
+    "field_action": "Note fruiting status and whether it is spreading through animal dung."
+  },
+  {
+    "scientific_name": "Prosopis juliflora",
+    "common_name": "Mesquite",
+    "group": "Plant",
+    "status": "invasive",
+    "summary": "Thorny tree forming impenetrable stands that lower water tables and suppress grasses.",
+    "identification": [
+      "Twice-pinnate, feathery leaves with small leaflets",
+      "Paired straight thorns at the nodes",
+      "Yellow catkin-like flower spikes; long, straw-coloured, curved pods"
+    ],
+    "habitat": "Riverbanks, floodplains and settlements in drier areas.",
+    "lookalikes": ["Native Vachellia/Acacia (round or flat pods, often white thorns)"],
+    "field_action": "Record stand size and whether seedlings are present downstream."
+  }
+]

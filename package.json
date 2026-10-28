@@ -1,0 +1,14 @@
+{
+  "name": "biosphere",
+  "private": true,
+  "packageManager": "pnpm@11.21.0",
+  "scripts": {
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter @biosphere/api migrate",
+    "db:seed": "pnpm --filter @biosphere/api seed",
+    "dev:api": "pnpm --filter @biosphere/api dev",
+    "dev:web": "pnpm --filter @biosphere/web dev",
+    "build": "pnpm -r build"
+  }
+}

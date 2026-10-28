@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgis/postgis:17-3.5-alpine
+    container_name: biosphere-db
+    environment:
+      POSTGRES_USER: biosphere
+      POSTGRES_PASSWORD: biosphere
+      POSTGRES_DB: biosphere
+    ports:
+      - "5544:5432"
+    volumes:
+      - biosphere-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U biosphere -d biosphere"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  biosphere-pgdata:

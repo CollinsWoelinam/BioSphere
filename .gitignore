@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.next/
+.env
+.env.local
+*.tsbuildinfo
+.DS_Store
+apps/web/public/maplibre/
+# Flutter
+apps/mobile/build/
+apps/mobile/.dart_tool/
