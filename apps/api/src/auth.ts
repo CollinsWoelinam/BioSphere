@@ -4,23 +4,44 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import jwt from "@fastify/jwt";
 import { config } from "./config.js";
+import { sql } from "./db.js";
 
 const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number) => Promise<Buffer>;
 
 export const ROLES = ["ADMIN", "RESEARCHER", "RANGER", "CITIZEN"] as const;
 export type Role = (typeof ROLES)[number];
 
+/** The signed-in account, loaded fresh from the database on every request. */
 export interface Viewer {
   sub: string;
   role: Role;
   name: string;
 }
 
+/**
+ * What the token carries. Role is deliberately absent: it is read from the database
+ * so demotions apply immediately, and `ver` must match users.token_version, so
+ * bumping the version revokes every outstanding token for that user.
+ */
+export interface TokenPayload {
+  sub: string;
+  ver: number;
+}
+
 declare module "@fastify/jwt" {
   interface FastifyJWT {
-    payload: Viewer;
+    payload: TokenPayload;
     user: Viewer;
   }
+}
+
+/** Returns the viewer for a verified token, or null if it was revoked or the account disabled. */
+export async function resolveViewer(token: TokenPayload): Promise<Viewer | null> {
+  const [u] = await sql<{ role: Role; name: string }[]>`
+    SELECT role, name FROM users
+    WHERE id = ${token.sub} AND token_version = ${token.ver} AND disabled_at IS NULL
+  `;
+  return u ? { sub: token.sub, role: u.role, name: u.name } : null;
 }
 
 declare module "fastify" {
@@ -53,11 +74,14 @@ export const authPlugin = fp(async (app) => {
   await app.register(jwt, { secret: config.jwtSecret, sign: { expiresIn: config.jwtTtl } });
 
   app.decorate("authenticate", async (req: FastifyRequest, reply: FastifyReply) => {
+    let viewer: Viewer | null = null;
     try {
-      await req.jwtVerify();
+      viewer = await resolveViewer(await req.jwtVerify<TokenPayload>());
     } catch {
-      return reply.code(401).send({ error: "Authentication required" });
+      // invalid signature, malformed or expired token
     }
+    if (!viewer) return reply.code(401).send({ error: "Authentication required" });
+    req.user = viewer;
   });
 
   app.decorate(

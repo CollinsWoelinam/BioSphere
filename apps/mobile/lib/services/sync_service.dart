@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -7,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../data/sighting_store.dart';
+import '../models/field_sighting.dart';
 import 'auth_service.dart';
 import 'settings.dart';
 
@@ -113,6 +115,7 @@ class SyncService extends ChangeNotifier {
         confirmed += ids.length;
         if (ids.length < batch.length) break; // server skipped some rows; avoid a tight loop
       }
+      await _uploadPhotos(session);
       lastSyncAt = DateTime.now();
       _failures = 0;
     } on _SessionExpired {
@@ -127,6 +130,44 @@ class SyncService extends ChangeNotifier {
       await refreshPending();
     }
     return confirmed;
+  }
+
+  /// Uploads photos for sightings the server has accepted. PUT with a client photo id
+  /// is idempotent, so a retry after a dropped connection never duplicates a photo.
+  Future<void> _uploadPhotos(Session session) async {
+    while (true) {
+      final batch = await _store.pendingPhotos(ownerId: session.userId);
+      if (batch.isEmpty) return;
+      var progressed = false;
+      for (final s in batch) {
+        final file = File(s.photoPath!);
+        if (!await file.exists()) {
+          await _store.setPhotoState(s.id, PhotoState.rejected); // deleted from the device
+          progressed = true;
+          continue;
+        }
+        final req = http.MultipartRequest('PUT', Uri.parse('${_settings.apiUrl}/observations/${s.id}/photos/${s.photoId}'))
+          ..headers['authorization'] = 'Bearer ${session.token}'
+          ..files.add(await http.MultipartFile.fromPath('photo', file.path));
+        final res = await http.Response.fromStream(await _client.send(req).timeout(const Duration(seconds: 120)));
+        switch (res.statusCode) {
+          case 200 || 201:
+            await _store.setPhotoState(s.id, PhotoState.uploaded);
+            progressed = true;
+          case 401:
+            throw _SessionExpired();
+          case 413 || 415:
+            // The server will never accept this file; don't retry it forever.
+            await _store.setPhotoState(s.id, PhotoState.rejected);
+            progressed = true;
+          case 404:
+            break; // sighting not visible yet; try again next pass
+          default:
+            throw http.ClientException('Photo upload failed (${res.statusCode})');
+        }
+      }
+      if (!progressed) return;
+    }
   }
 
   /// Exponential backoff (30 s → 15 min) while there is still work queued.

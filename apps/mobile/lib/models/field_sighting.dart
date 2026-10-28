@@ -2,6 +2,10 @@ import 'package:uuid/uuid.dart';
 
 enum ObserverType { ranger, citizen }
 
+/// Photos upload after their sighting is accepted. `rejected` means the server refused
+/// the file permanently (e.g. unsupported format), so it is not retried.
+enum PhotoState { none, pending, uploaded, rejected }
+
 /// A sighting captured in the field. Stored locally first and synced when online.
 ///
 /// The [id] is generated on the device so the server can de-duplicate retries:
@@ -18,6 +22,10 @@ class FieldSighting {
   final int individualCount;
   final String? habitatNotes;
   final String? photoPath;
+
+  /// Client-generated id so photo uploads are idempotent, like sighting ids.
+  final String? photoId;
+  final PhotoState photoState;
   final DateTime timestamp;
   final DateTime? syncedAt;
 
@@ -37,9 +45,13 @@ class FieldSighting {
     this.individualCount = 1,
     this.habitatNotes,
     this.photoPath,
+    String? photoId,
+    PhotoState? photoState,
     this.syncedAt,
     this.ownerId,
-  }) : id = id ?? const Uuid().v4();
+  })  : id = id ?? const Uuid().v4(),
+        photoId = photoId ?? (photoPath != null ? const Uuid().v4() : null),
+        photoState = photoState ?? (photoPath != null ? PhotoState.pending : PhotoState.none);
 
   bool get isSynced => syncedAt != null;
 
@@ -78,6 +90,8 @@ class FieldSighting {
         'individual_count': individualCount,
         'habitat_notes': habitatNotes,
         'photo_path': photoPath,
+        'photo_id': photoId,
+        'photo_state': photoState.name,
         'observed_at': timestamp.toUtc().millisecondsSinceEpoch,
         'synced_at': syncedAt?.millisecondsSinceEpoch,
         'owner_id': ownerId,
@@ -95,6 +109,8 @@ class FieldSighting {
         individualCount: r['individual_count'] as int,
         habitatNotes: r['habitat_notes'] as String?,
         photoPath: r['photo_path'] as String?,
+        photoId: r['photo_id'] as String?,
+        photoState: PhotoState.values.byName((r['photo_state'] as String?) ?? 'none'),
         timestamp: DateTime.fromMillisecondsSinceEpoch(r['observed_at'] as int, isUtc: true),
         syncedAt: r['synced_at'] == null
             ? null

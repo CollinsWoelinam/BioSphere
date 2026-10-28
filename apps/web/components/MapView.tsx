@@ -64,6 +64,8 @@ interface Props {
   frontier: FeatureCollection<Polygon | MultiPolygon, FrontierProps> | null;
   density: DensityFC | null;
   liveIds: Set<string>;
+  selectedId: string | null;
+  onSelectSighting: (s: Sighting | null) => void;
 }
 
 interface Segment extends TrajectoryStep {
@@ -200,20 +202,22 @@ export function MapView(p: Props) {
         id: "sightings",
         data: p.visible,
         pickable: true,
+        onClick: ({ object }) => p.onSelectSighting(object ?? null),
         radiusUnits: "pixels",
-        getRadius: (d) => (p.liveIds.has(d.id) ? 8 : 4),
+        getRadius: (d) => (d.id === p.selectedId ? 9 : p.liveIds.has(d.id) ? 8 : 4),
         stroked: true,
         lineWidthUnits: "pixels",
-        getLineWidth: (d) => (d.is_invasive || p.liveIds.has(d.id) ? 1.5 : 1),
+        getLineWidth: (d) => (d.id === p.selectedId ? 3 : d.is_invasive || p.liveIds.has(d.id) ? 1.5 : 1),
         // Invasive species get an ink ring so they read as invasive without relying on hue.
-        getLineColor: (d) => (d.is_invasive || p.liveIds.has(d.id) ? rgba(ink, 255) : rgba(surface, 200)),
+        getLineColor: (d) =>
+          d.id === p.selectedId || d.is_invasive || p.liveIds.has(d.id) ? rgba(ink, 255) : rgba(surface, 200),
         // Fade older sightings within the window so recent movement stands out.
         getFillColor: (d) => rgba(color(d.species), 70 + Math.round(185 * ((d.t - p.windowStart) / span))),
         updateTriggers: {
           getFillColor: [p.windowStart, span, p.mode, p.colorIndex],
-          getRadius: p.liveIds,
-          getLineColor: [p.liveIds, p.mode],
-          getLineWidth: p.liveIds,
+          getRadius: [p.liveIds, p.selectedId],
+          getLineColor: [p.liveIds, p.mode, p.selectedId],
+          getLineWidth: [p.liveIds, p.selectedId],
         },
       }),
     p.layers.trajectory &&
@@ -294,6 +298,7 @@ function tooltip(info: PickingInfo) {
             : ["GPS accuracy", s.accuracy_m != null ? `±${fmtNum(s.accuracy_m, 1)} m` : "–"],
           ...(s.is_invasive ? ([["Status", "Invasive"]] as [string, string][]) : []),
           ...(s.habitat_notes ? ([["Notes", s.habitat_notes]] as [string, string][]) : []),
+          ...(s.photo_count ? ([["Photos", `${s.photo_count} · click to view`]] as [string, string][]) : []),
         ],
         `<i>${s.species}</i>`,
       );

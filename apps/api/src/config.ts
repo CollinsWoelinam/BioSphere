@@ -15,4 +15,6 @@ export const config = {
   jwtTtl: process.env.JWT_TTL ?? "30d",
   // Sensitive species are snapped to a grid this many degrees wide (~11 km at the equator).
   sensitiveGridDeg: Number(process.env.SENSITIVE_GRID_DEG ?? 0.1),
+  photoDir: process.env.PHOTO_DIR ?? new URL("../data/photos/", import.meta.url).pathname,
+  maxPhotoBytes: Number(process.env.MAX_PHOTO_MB ?? 15) * 1024 * 1024,
 };

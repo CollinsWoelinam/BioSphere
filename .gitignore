@@ -9,3 +9,4 @@ apps/web/public/maplibre/
 # Flutter
 apps/mobile/build/
 apps/mobile/.dart_tool/
+apps/api/data/
