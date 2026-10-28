@@ -16,7 +16,9 @@ import {
   type Trajectory,
 } from "@/lib/api";
 import { useColorMode } from "@/lib/useColorMode";
+import { speciesColorHex } from "@/lib/colors";
 import { MapView, type Basemap } from "./MapView";
+import { SightingPanel } from "./SightingPanel";
 import { Sidebar } from "./Sidebar";
 import { TimeBar } from "./TimeBar";
 
@@ -86,6 +88,7 @@ export function Workspace({ user, onSignOut }: { user: SessionUser; onSignOut: (
   const [cellKm, setCellKm] = useState(4);
   const [liveConnected, setLiveConnected] = useState(false);
   const [liveIds, setLiveIds] = useState<Set<string>>(new Set());
+  const [selectedSighting, setSelectedSighting] = useState<Sighting | null>(null);
 
   /**
    * Species this viewer may run spatial analyses on. Citizens see sensitive species only
@@ -355,7 +358,16 @@ export function Workspace({ user, onSignOut }: { user: SessionUser; onSignOut: (
           frontier={frontier}
           density={density}
           liveIds={liveIds}
+          selectedId={selectedSighting?.id ?? null}
+          onSelectSighting={setSelectedSighting}
         />
+        {selectedSighting && (
+          <SightingPanel
+            sighting={selectedSighting}
+            swatch={speciesColorHex(colorIndex.get(selectedSighting.species) ?? 99, mode)}
+            onClose={() => setSelectedSighting(null)}
+          />
+        )}
         {error && (
           <div className="toast" role="alert">
             <span>{error}</span>

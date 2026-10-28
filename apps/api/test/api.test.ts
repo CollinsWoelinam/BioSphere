@@ -7,6 +7,8 @@ import type { FastifyInstance } from "fastify";
 import type { Role } from "../src/auth.js";
 import { buildApp } from "../src/app.js";
 import { sql } from "../src/db.js";
+import sharp from "sharp";
+import { deletePhotoFiles } from "../src/photos.js";
 import { createUser } from "../src/users.js";
 
 const RUN = randomUUID().slice(0, 8);
@@ -21,6 +23,43 @@ const point = (lon: number, lat: number, day: number, species = SPECIES, id = ra
   geometry: { type: "Point", coordinates: [lon, lat] },
   properties: { id, species, timestamp: `2026-01-${String(day).padStart(2, "0")}T12:00:00Z` },
 });
+
+const photoIds: string[] = [];
+
+async function login(email: string) {
+  const res = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password: PASSWORD } });
+  return res.json().token as string;
+}
+
+/** Creates an extra throwaway account and returns its id and token. */
+async function account(role: Role, label: string) {
+  const email = `${label}-${RUN}@test.local`;
+  const user = await createUser(sql, { email, name: label, role, password: PASSWORD });
+  return { id: user.id, email, token: await login(email) };
+}
+
+const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
+
+/** Builds a multipart body by hand so tests need no extra dependency. */
+function multipart(field: string, filename: string, data: Buffer, type = "image/jpeg") {
+  const boundary = `----biosphere${RUN}`;
+  const body = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${field}"; filename="${filename}"\r\nContent-Type: ${type}\r\n\r\n`),
+    data,
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ]);
+  return { payload: body, headers: { "content-type": `multipart/form-data; boundary=${boundary}` } };
+}
+
+/** A small JPEG carrying EXIF GPS tags, like a phone camera produces. */
+const jpegWithGps = () =>
+  sharp({ create: { width: 640, height: 480, channels: 3, background: { r: 90, g: 120, b: 60 } } })
+    .withExif({
+      IFD0: { Make: "TestCam", Model: "Field 1" },
+      IFD3: { GPSLatitudeRef: "S", GPSLatitude: "2/1 44/1 3600/100", GPSLongitudeRef: "E", GPSLongitude: "34/1 46/1 5200/100" },
+    })
+    .jpeg()
+    .toBuffer();
 
 const as = (role: Role) => ({ authorization: `Bearer ${tokens[role]}` });
 const get = (role: Role, url: string) => app.inject({ url, headers: as(role) });
@@ -39,6 +78,7 @@ before(async () => {
 });
 
 after(async () => {
+  await Promise.all(photoIds.map(deletePhotoFiles));
   await sql`DELETE FROM species_observations WHERE species_name IN (${SPECIES}, ${SENSITIVE})`;
   await sql`DELETE FROM species WHERE species_name IN (${SPECIES}, ${SENSITIVE})`;
   await sql`DELETE FROM users WHERE email LIKE ${"%-" + RUN + "@test.local"}`;
@@ -75,6 +115,38 @@ describe("auth", () => {
     const payload = { email: `staff-${RUN}@test.local`, name: "Staff", password: PASSWORD, role: "RANGER" };
     assert.equal((await post("CITIZEN", "/auth/users", payload)).statusCode, 403);
     assert.equal((await post("ADMIN", "/auth/users", payload)).statusCode, 201);
+  });
+});
+
+describe("revocation", () => {
+  test("logout-all invalidates existing tokens", async () => {
+    const u = await account("RANGER", "logout");
+    assert.equal((await app.inject({ url: "/auth/me", headers: bearer(u.token) })).statusCode, 200);
+    assert.equal((await app.inject({ method: "POST", url: "/auth/logout-all", headers: bearer(u.token) })).statusCode, 204);
+    assert.equal((await app.inject({ url: "/auth/me", headers: bearer(u.token) })).statusCode, 401);
+    assert.equal((await app.inject({ url: "/auth/me", headers: bearer(await login(u.email)) })).statusCode, 200);
+  });
+
+  test("role changes apply immediately and disabling blocks sign-in", async () => {
+    const u = await account("CITIZEN", "promote");
+    const patch = (body: object) =>
+      app.inject({ method: "PATCH", url: `/auth/users/${u.id}`, payload: body, headers: as("ADMIN") });
+
+    assert.equal((await patch({ role: "RANGER" })).statusCode, 200);
+    const fresh = await login(u.email); // the promotion revoked the old token
+    const sensitive = await app.inject({ url: `/analysis/home-range?species=${encodeURIComponent(SENSITIVE)}`, headers: bearer(fresh) });
+    assert.notEqual(sensitive.statusCode, 403);
+
+    assert.equal((await patch({ disabled: true })).statusCode, 200);
+    assert.equal((await app.inject({ url: "/auth/me", headers: bearer(fresh) })).statusCode, 401);
+    const relogin = await app.inject({ method: "POST", url: "/auth/login", payload: { email: u.email, password: PASSWORD } });
+    assert.equal(relogin.statusCode, 401);
+  });
+
+  test("admins cannot demote or disable themselves", async () => {
+    const [me] = await sql`SELECT id FROM users WHERE email = ${`admin-${RUN}@test.local`}`;
+    const res = await app.inject({ method: "PATCH", url: `/auth/users/${me.id}`, payload: { disabled: true }, headers: as("ADMIN") });
+    assert.equal(res.statusCode, 409);
   });
 });
 
@@ -142,6 +214,68 @@ describe("sensitive species", () => {
       assert.equal((await get("CITIZEN", `${path}?${q}`)).statusCode, 403, path);
     }
     assert.equal((await get("RANGER", `/analysis/home-range?${q}`)).statusCode, 200);
+  });
+});
+
+describe("photos", () => {
+  const obsId = randomUUID();
+  const rhinoId = randomUUID();
+
+  before(async () => {
+    await post("RANGER", "/observations", {
+      type: "FeatureCollection",
+      features: [point(35, -2, 9, SPECIES, obsId), point(34.78, -2.74, 9, SENSITIVE, rhinoId)],
+    });
+  });
+
+  const upload = (role: Role, observation: string, photoId: string, data: Buffer, type?: string) => {
+    photoIds.push(photoId);
+    const mp = multipart("photo", "field.jpg", data, type);
+    return app.inject({ method: "PUT", url: `/observations/${observation}/photos/${photoId}`, payload: mp.payload, headers: { ...mp.headers, ...as(role) } });
+  };
+
+  test("upload strips EXIF (including GPS) and is idempotent", async () => {
+    const original = await jpegWithGps();
+    assert.ok((await sharp(original).metadata()).exif, "fixture should carry EXIF");
+
+    const photoId = randomUUID();
+    const first = await upload("RANGER", obsId, photoId, original);
+    assert.equal(first.statusCode, 201);
+    assert.equal(first.json().width, 640);
+
+    const retry = await upload("RANGER", obsId, photoId, original);
+    assert.equal(retry.statusCode, 200);
+
+    const stored = await get("RANGER", `/photos/${photoId}`);
+    assert.equal(stored.statusCode, 200);
+    assert.equal(stored.headers["content-type"], "image/jpeg");
+    const meta = await sharp(stored.rawPayload).metadata();
+    assert.equal(meta.exif, undefined);
+    assert.equal(meta.width, 640);
+
+    const thumb = await sharp((await get("RANGER", `/photos/${photoId}?size=thumb`)).rawPayload).metadata();
+    assert.ok(thumb.width! <= 400);
+
+    const listed = await get("CITIZEN", `/observations/${obsId}/photos`);
+    assert.equal(listed.json().length, 1);
+    const obs = (await get("RANGER", `/observations?species=${encodeURIComponent(SPECIES)}`)).json().features;
+    assert.equal(obs.find((f: { id: string }) => f.id === obsId).properties.photo_count, 1);
+  });
+
+  test("only the observer can upload", async () => {
+    assert.equal((await upload("CITIZEN", obsId, randomUUID(), await jpegWithGps())).statusCode, 403);
+  });
+
+  test("non-images are rejected", async () => {
+    assert.equal((await upload("RANGER", obsId, randomUUID(), Buffer.from("not an image"), "image/jpeg")).statusCode, 415);
+  });
+
+  test("citizens cannot see photos of sensitive species", async () => {
+    const photoId = randomUUID();
+    assert.equal((await upload("RANGER", rhinoId, photoId, await jpegWithGps())).statusCode, 201);
+    assert.equal((await get("CITIZEN", `/photos/${photoId}`)).statusCode, 403);
+    assert.equal((await get("CITIZEN", `/observations/${rhinoId}/photos`)).statusCode, 403);
+    assert.equal((await get("RANGER", `/photos/${photoId}`)).statusCode, 200);
   });
 });
 

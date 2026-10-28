@@ -51,6 +51,7 @@ export interface ObservationProps {
   habitat_notes: string | null;
   /** True when the location was snapped to a coarse grid for this viewer. */
   generalized?: boolean;
+  photo_count?: number;
 }
 export type Observation = Feature<Point, ObservationProps> & { id: string };
 
@@ -59,6 +60,15 @@ export interface Sighting extends ObservationProps {
   id: string;
   position: [number, number];
   t: number;
+}
+
+export interface Photo {
+  id: string;
+  width: number;
+  height: number;
+  created_at: string;
+  url: string;
+  thumb_url: string;
 }
 
 export interface HullProps {
@@ -179,6 +189,13 @@ export const api = {
     ),
   frontier: (f: Filter) =>
     get<FeatureCollection<Polygon | MultiPolygon, FrontierProps>>("/analysis/invasive-frontier", { ...f, bucket: "month" }),
+  photos: (observationId: string) => request<Photo[]>(`/observations/${observationId}/photos`),
+  /** <img> cannot send the bearer token, so photos are fetched and shown as blob URLs. */
+  photoBlobUrl: async (path: string) => {
+    const res = await fetch(`${API_URL}${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new ApiError(`Photo unavailable (${res.status})`, res.status);
+    return URL.createObjectURL(await res.blob());
+  },
   liveUrl: () => `${API_URL.replace(/^http/, "ws")}/ws?token=${encodeURIComponent(token ?? "")}`,
 };
 

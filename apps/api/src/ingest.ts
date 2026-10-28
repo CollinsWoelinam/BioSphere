@@ -27,6 +27,7 @@ export interface ObservationRow {
   device_id: string | null;
   observed_at: Date;
   generalized?: boolean;
+  photo_count?: number;
 }
 
 /**
@@ -113,6 +114,7 @@ export function toFeature(r: ObservationRow) {
       individual_count: r.individual_count,
       habitat_notes: r.habitat_notes,
       ...(r.generalized ? { generalized: true } : {}),
+      ...(r.photo_count !== undefined ? { photo_count: r.photo_count } : {}),
     },
   };
 }

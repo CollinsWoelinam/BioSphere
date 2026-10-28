@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:biosphere_field/data/sighting_store.dart';
 import 'package:biosphere_field/models/field_sighting.dart';
@@ -132,6 +133,83 @@ void main() {
       await sync.syncNow(); // must not hit the server again with a dead token
       expect(calls, 1);
       sync.dispose();
+    });
+
+    group('photos', () {
+      late Directory tmp;
+      setUp(() async => tmp = await Directory.systemTemp.createTemp('biosphere_photos'));
+      tearDown(() => tmp.delete(recursive: true));
+
+      Future<FieldSighting> withPhoto(String name) async {
+        final file = File('${tmp.path}/$name.jpg')..writeAsBytesSync([0xFF, 0xD8, 0xFF, 0xD9]);
+        final s = FieldSighting(
+          speciesName: 'Loxodonta africana',
+          latitude: -1.5,
+          longitude: 35,
+          timestamp: DateTime.utc(2026, 10, 28),
+          ownerId: 'u-ranger',
+          photoPath: file.path,
+        );
+        await store.insert(s);
+        return s;
+      }
+
+      test('upload after the sighting is accepted, using the stable photo id', () async {
+        final s = await withPhoto('a');
+        expect(s.photoState, PhotoState.pending);
+        final calls = <String>[];
+        final client = MockClient((req) async {
+          calls.add('${req.method} ${req.url.path}');
+          if (req.method == 'POST') {
+            final ids = [for (final f in jsonDecode(req.body)['features']) f['properties']['id'] as String];
+            return http.Response(jsonEncode({'accepted': ids, 'duplicates': []}), 201);
+          }
+          expect(req.headers['authorization'], 'Bearer tok-ranger');
+          expect(req.headers['content-type'], startsWith('multipart/form-data'));
+          return http.Response('{}', 201);
+        });
+        final sync = SyncService(store, settings, auth, client: client);
+        await sync.syncNow();
+
+        expect(calls, ['POST /observations', 'PUT /observations/${s.id}/photos/${s.photoId}']);
+        expect((await store.all()).single.photoState, PhotoState.uploaded);
+        sync.dispose();
+      });
+
+      test('a permanently refused photo is marked rejected, not retried', () async {
+        await withPhoto('b');
+        var puts = 0;
+        final client = MockClient((req) async {
+          if (req.method == 'POST') {
+            final ids = [for (final f in jsonDecode(req.body)['features']) f['properties']['id'] as String];
+            return http.Response(jsonEncode({'accepted': ids, 'duplicates': []}), 201);
+          }
+          puts++;
+          return http.Response(jsonEncode({'error': 'Upload must be a JPEG'}), 415);
+        });
+        final sync = SyncService(store, settings, auth, client: client);
+        await sync.syncNow();
+        await sync.syncNow();
+
+        expect(puts, 1);
+        expect((await store.all()).single.photoState, PhotoState.rejected);
+        expect(sync.lastError, isNull);
+        sync.dispose();
+      });
+
+      test('a photo deleted from the device is skipped', () async {
+        final s = await withPhoto('c');
+        File(s.photoPath!).deleteSync();
+        final client = MockClient((req) async {
+          if (req.method == 'PUT') fail('should not upload a missing file');
+          final ids = [for (final f in jsonDecode(req.body)['features']) f['properties']['id'] as String];
+          return http.Response(jsonEncode({'accepted': ids, 'duplicates': []}), 201);
+        });
+        final sync = SyncService(store, settings, auth, client: client);
+        await sync.syncNow();
+        expect((await store.all()).single.photoState, PhotoState.rejected);
+        sync.dispose();
+      });
     });
 
     test('does nothing when signed out', () async {

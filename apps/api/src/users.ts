@@ -6,6 +6,8 @@ export interface User {
   email: string;
   name: string;
   role: Role;
+  token_version: number;
+  disabled_at: Date | null;
   created_at: Date;
 }
 
@@ -25,7 +27,7 @@ export async function createUser(
     const [user] = await sql<User[]>`
       INSERT INTO users (email, name, password_hash, role)
       VALUES (${u.email.trim()}, ${u.name.trim()}, ${passwordHash}, ${u.role})
-      RETURNING id, email, name, role, created_at
+      RETURNING id, email, name, role, token_version, disabled_at, created_at
     `;
     return user;
   } catch (err) {
