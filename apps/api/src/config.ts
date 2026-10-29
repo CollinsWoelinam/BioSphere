@@ -17,4 +17,14 @@ export const config = {
   sensitiveGridDeg: Number(process.env.SENSITIVE_GRID_DEG ?? 0.1),
   photoDir: process.env.PHOTO_DIR ?? new URL("../data/photos/", import.meta.url).pathname,
   maxPhotoBytes: Number(process.env.MAX_PHOTO_MB ?? 15) * 1024 * 1024,
+  photoStorage: (process.env.PHOTO_STORAGE ?? "local") as "local" | "cloudinary",
+  cloudinaryFolder: process.env.CLOUDINARY_FOLDER ?? "biosphere/photos",
 };
+
+if (!["local", "cloudinary"].includes(config.photoStorage)) {
+  throw new Error(`PHOTO_STORAGE must be "local" or "cloudinary", got "${config.photoStorage}"`);
+}
+// The Cloudinary SDK reads CLOUDINARY_URL (cloudinary://key:secret@cloud) itself.
+if (config.photoStorage === "cloudinary" && !process.env.CLOUDINARY_URL) {
+  throw new Error("PHOTO_STORAGE=cloudinary requires CLOUDINARY_URL");
+}

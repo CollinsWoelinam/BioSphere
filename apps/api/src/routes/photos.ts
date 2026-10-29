@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { seesExactLocations, type Viewer } from "../auth.js";
 import { sql } from "../db.js";
-import { deletePhotoFiles, readPhoto, storePhoto } from "../photos.js";
+import { deletePhoto, readPhoto, storePhoto } from "../photos.js";
 
 interface PhotoRow {
   id: string;
@@ -116,7 +116,7 @@ export async function photoRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: "Only the observer can delete photos" });
     }
     await sql`DELETE FROM observation_photos WHERE id = ${photoId}`;
-    await deletePhotoFiles(photoId);
+    await deletePhoto(photoId);
     return reply.code(204).send();
   });
 }
