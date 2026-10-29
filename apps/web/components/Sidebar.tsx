@@ -38,6 +38,8 @@ interface Props {
   onCellKmChange: (n: number) => void;
   domain: [number, number];
   liveConnected: boolean;
+  /** Staff-only collar panel, rendered after the map layers. */
+  collarPanel?: React.ReactNode;
 }
 
 const LAYER_LABELS: [keyof LayerToggles, string, string][] = [
@@ -140,6 +142,8 @@ export function Sidebar(p: Props) {
         {(p.layers.heatmap || p.layers.hex) && <SequentialLegend />}
       </Section>
 
+      {p.collarPanel}
+
       <Section title="Home range hull">
         <div className="segmented" role="radiogroup" aria-label="Hull method">
           {(["concave", "convex"] as const).map((m) => (
@@ -216,7 +220,7 @@ export function Sidebar(p: Props) {
   );
 }
 
-function Section({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
+export function Section({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="panel">
       <div className="panel-head">

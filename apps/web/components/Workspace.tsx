@@ -18,6 +18,8 @@ import {
 import { useColorMode } from "@/lib/useColorMode";
 import { speciesColorHex } from "@/lib/colors";
 import { MapView, type Basemap } from "./MapView";
+import { useCollars } from "@/lib/useCollars";
+import { CollarPanel } from "./CollarPanel";
 import { SightingPanel } from "./SightingPanel";
 import { Sidebar } from "./Sidebar";
 import { TimeBar } from "./TimeBar";
@@ -89,6 +91,7 @@ export function Workspace({ user, onSignOut }: { user: SessionUser; onSignOut: (
   const [liveConnected, setLiveConnected] = useState(false);
   const [liveIds, setLiveIds] = useState<Set<string>>(new Set());
   const [selectedSighting, setSelectedSighting] = useState<Sighting | null>(null);
+  const collars = useCollars(user);
 
   /**
    * Species this viewer may run spatial analyses on. Citizens see sensitive species only
@@ -341,6 +344,7 @@ export function Workspace({ user, onSignOut }: { user: SessionUser; onSignOut: (
         onCellKmChange={setCellKm}
         domain={domain}
         liveConnected={liveConnected}
+        collarPanel={<CollarPanel collars={collars} swatch={(s) => speciesColorHex(colorIndex.get(s) ?? 99, mode)} />}
       />
       <main className="map-pane">
         <MapView
@@ -360,6 +364,9 @@ export function Workspace({ user, onSignOut }: { user: SessionUser; onSignOut: (
           liveIds={liveIds}
           selectedId={selectedSighting?.id ?? null}
           onSelectSighting={setSelectedSighting}
+          tracks={collars.tracks}
+          individualRanges={collars.ranges}
+          showOutliers={collars.showOutliers}
         />
         {selectedSighting && (
           <SightingPanel

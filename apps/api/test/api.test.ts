@@ -68,7 +68,7 @@ const post = (role: Role, url: string, payload: unknown) => app.inject({ method:
 before(async () => {
   process.env.LOG_LEVEL = "silent";
   app = await buildApp();
-  for (const role of ["ADMIN", "RANGER", "CITIZEN"] as Role[]) {
+  for (const role of ["ADMIN", "RESEARCHER", "RANGER", "CITIZEN"] as Role[]) {
     const email = `${role.toLowerCase()}-${RUN}@test.local`;
     await createUser(sql, { email, name: role, role, password: PASSWORD });
     const res = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password: PASSWORD } });
@@ -334,6 +334,84 @@ describe("admin species registry", () => {
     const sensitive = entries.find((e: { details: { after: { is_sensitive: boolean } } }) => e.details.after.is_sensitive);
     assert.equal(sensitive.action, "species.update");
     assert.equal(sensitive.actor_email, `admin-${RUN}@test.local`);
+  });
+});
+
+describe("collar telemetry", () => {
+  const CODE = `T-${RUN}`;
+  let id: string;
+  const csvHeaders = (role: Role) => ({ ...as(role), "content-type": "text/csv" });
+
+  /** A straight 2-hourly walk east (~1.1 km per fix) with one 15 km GPS spike at index 10. */
+  function movebankCsv(spikeAt = 10) {
+    const lines = ["timestamp,location-long,location-lat,gps:hdop"];
+    for (let i = 0; i < 30; i++) {
+      const t = new Date(Date.UTC(2026, 6, 1) + i * 2 * 3_600_000).toISOString().replace("T", " ").replace("Z", "");
+      const lat = i === spikeAt ? -2.0 + 0.135 : -2.0;
+      lines.push(`${t},${(35 + i * 0.01).toFixed(5)},${lat.toFixed(5)},1.2`);
+    }
+    return lines.join("\n");
+  }
+
+  before(async () => {
+    const res = await post("RESEARCHER", "/individuals", { code: CODE, species_name: SPECIES, name: "Test", sex: "F" });
+    assert.equal(res.statusCode, 201);
+    id = res.json().id;
+  });
+  after(async () => {
+    await sql`DELETE FROM individuals WHERE code IN (${CODE}, ${CODE + "-fast"})`;
+    await sql`DELETE FROM audit_log WHERE target IN (${CODE}, ${CODE + "-fast"})`;
+  });
+
+  test("is staff-only; only admins and researchers manage individuals", async () => {
+    assert.equal((await get("CITIZEN", "/individuals")).statusCode, 403);
+    assert.equal((await get("RANGER", "/individuals")).statusCode, 200);
+    assert.equal((await post("RANGER", "/individuals", { code: "X", species_name: SPECIES })).statusCode, 403);
+    assert.equal((await get("CITIZEN", `/individuals/${id}/track`)).statusCode, 403);
+  });
+
+  test("imports Movebank CSV, rejects bad rows and skips duplicates on re-import", async () => {
+    const csv = movebankCsv() + "\nnot-a-time,35,-2,1\n2026-07-05 00:00:00.000,999,-2,1";
+    const first = await app.inject({ method: "POST", url: `/individuals/${id}/fixes`, payload: csv, headers: csvHeaders("RESEARCHER") });
+    assert.equal(first.statusCode, 200);
+    assert.deepEqual([first.json().inserted, first.json().duplicates, first.json().rejected], [30, 0, 2]);
+
+    const again = await app.inject({ method: "POST", url: `/individuals/${id}/fixes`, payload: movebankCsv(), headers: csvHeaders("RESEARCHER") });
+    assert.deepEqual([again.json().inserted, again.json().duplicates], [0, 30]);
+  });
+
+  test("flags the out-and-back GPS spike and nothing else", async () => {
+    const res = await get("RANGER", `/individuals/${id}/track`);
+    assert.equal(res.statusCode, 200);
+    const { fixes, summary } = res.json();
+    const flagged = fixes.map((f: { outlier: boolean }, i: number) => (f.outlier ? i : -1)).filter((i: number) => i >= 0);
+    assert.deepEqual(flagged, [10]);
+    // 29 clean steps of ~1.11 km would be ~32 km; the spike must not add ~30 km of detour.
+    assert.ok(summary.total_km > 30 && summary.total_km < 34, String(summary.total_km));
+    assert.equal(summary.median_interval_h, 2);
+  });
+
+  test("a genuine fast movement that keeps going is not flagged", async () => {
+    const fast = await post("RESEARCHER", "/individuals", { code: CODE + "-fast", species_name: SPECIES });
+    // ~8 km per 2 h fix in a straight line: fast but continuous.
+    const fixes = Array.from({ length: 12 }, (_, i) => ({
+      t: new Date(Date.UTC(2026, 6, 1) + i * 2 * 3_600_000).toISOString(),
+      lon: 35 + i * 0.072,
+      lat: -2,
+    }));
+    await post("RESEARCHER", `/individuals/${fast.json().id}/fixes`, { fixes });
+    const { summary } = (await get("RANGER", `/individuals/${fast.json().id}/track`)).json();
+    assert.equal(summary.outliers, 0);
+  });
+
+  test("home range uses clean fixes and reports the 50% core", async () => {
+    const res = await get("RANGER", `/individuals/${id}/home-range?core=100`);
+    assert.equal(res.statusCode, 200);
+    const hr = res.json();
+    assert.equal(hr.fixes_used, 29);
+    assert.ok(hr.core50_area_sq_km <= hr.area_sq_km);
+    const empty = await get("RANGER", `/individuals/${id}/home-range?from=2020-01-01T00:00:00Z&to=2020-02-01T00:00:00Z`);
+    assert.equal(empty.statusCode, 422);
   });
 });
 

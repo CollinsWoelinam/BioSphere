@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import DeckGL from "@deck.gl/react";
 import { FlyToInterpolator, WebMercatorViewport, type MapViewState, type PickingInfo } from "@deck.gl/core";
-import { GeoJsonLayer, IconLayer, PathLayer, ScatterplotLayer } from "@deck.gl/layers";
+import { GeoJsonLayer, IconLayer, PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import { HeatmapLayer } from "@deck.gl/aggregation-layers";
 import { Map } from "react-map-gl/maplibre";
 import { setWorkerUrl, type StyleSpecification } from "maplibre-gl";
 import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { FrontierProps, HullComparison, HullProps, Sighting, Trajectory, TrajectoryStep } from "@/lib/api";
+import type { FrontierProps, HullComparison, HullProps, IndividualRange, Sighting, Track, TrackFix, Trajectory, TrajectoryStep } from "@/lib/api";
 import { DIVERGING, SEQUENTIAL_BLUE, rgba, speciesColor, type Mode } from "@/lib/colors";
 import { compass, fmtDate, fmtMonth, fmtNum } from "@/lib/format";
 import type { DensityFC, LayerToggles } from "./Workspace";
@@ -66,6 +66,14 @@ interface Props {
   liveIds: Set<string>;
   selectedId: string | null;
   onSelectSighting: (s: Sighting | null) => void;
+  tracks: Record<string, Track>;
+  individualRanges: Record<string, IndividualRange>;
+  showOutliers: boolean;
+}
+
+interface TrailFix extends TrackFix {
+  code: string;
+  species_name: string;
 }
 
 interface Segment extends TrajectoryStep {
@@ -90,6 +98,27 @@ export function MapView(p: Props) {
     setViewState({ longitude, latitude, zoom, transitionDuration: 800, transitionInterpolator: new FlyToInterpolator() });
     setFitted(true);
   }, [p.bounds, fitted]);
+
+  // Fly to a collared animal's track when it is first selected.
+  const shownTracks = useRef(new Set<string>());
+  useEffect(() => {
+    const ids = Object.keys(p.tracks);
+    const added = ids.filter((id) => !shownTracks.current.has(id));
+    shownTracks.current = new Set(ids);
+    const fixes = added.flatMap((id) => p.tracks[id].fixes.filter((f) => !f.outlier));
+    if (!fixes.length) return;
+    const lons = fixes.map((f) => f.lon);
+    const lats = fixes.map((f) => f.lat);
+    const vp = new WebMercatorViewport({ width: window.innerWidth - 360, height: window.innerHeight - 200 });
+    const { longitude, latitude, zoom } = vp.fitBounds(
+      [
+        [Math.min(...lons), Math.min(...lats)],
+        [Math.max(...lons), Math.max(...lats)],
+      ],
+      { padding: 60 },
+    );
+    setViewState({ longitude, latitude, zoom: Math.min(zoom, 12), transitionDuration: 800, transitionInterpolator: new FlyToInterpolator() });
+  }, [p.tracks]);
 
   const color = (species: string) => speciesColor(p.colorIndex.get(species) ?? 99, p.mode);
   const surface: [number, number, number] = p.mode === "dark" ? [26, 26, 25] : [252, 252, 251];
@@ -125,6 +154,37 @@ export function MapView(p: Props) {
   }, [p.frontier, p.cursor]);
 
   const span = Math.max(p.cursor - p.windowStart, 1);
+
+  // Collar trails follow the same time window as sightings, so playback animates them.
+  const trails = useMemo(() => {
+    const paths: { code: string; species_name: string; path: [number, number][] }[] = [];
+    const heads: TrailFix[] = [];
+    const outliers: TrailFix[] = [];
+    for (const tr of Object.values(p.tracks)) {
+      const meta = { code: tr.individual.code, species_name: tr.individual.species_name };
+      const inWindow = tr.fixes.filter((f) => f.t >= p.windowStart && f.t <= p.cursor);
+      const clean = inWindow.filter((f) => !f.outlier);
+      if (clean.length) {
+        paths.push({ ...meta, path: clean.map((f) => [f.lon, f.lat]) });
+        heads.push({ ...clean[clean.length - 1], ...meta });
+      }
+      for (const f of inWindow) if (f.outlier) outliers.push({ ...f, ...meta });
+    }
+    return { paths, heads, outliers };
+  }, [p.tracks, p.windowStart, p.cursor]);
+
+  const rangeFeatures = useMemo(
+    () =>
+      Object.entries(p.individualRanges).flatMap(([id, r]) => {
+        const species = p.tracks[id]?.individual.species_name ?? "";
+        const code = p.tracks[id]?.individual.code ?? "";
+        return [
+          { type: "Feature", geometry: r.geometry, properties: { species, code, core: false, area: r.area_sq_km } },
+          { type: "Feature", geometry: r.core50_geometry, properties: { species, code, core: true, area: r.core50_area_sq_km } },
+        ] as Feature[];
+      }),
+    [p.individualRanges, p.tracks],
+  );
 
   const deckLayers = [
     p.layers.hex &&
@@ -261,6 +321,74 @@ export function MapView(p: Props) {
         getFillColor: (s) => rgba(color(s.species_name), 255),
         updateTriggers: { getFillColor: p.mode, getLineColor: p.mode },
       }),
+    rangeFeatures.length > 0 &&
+      new GeoJsonLayer({
+        id: "individual-range",
+        data: rangeFeatures,
+        pickable: true,
+        getFillColor: (f: Feature) => rgba(color(f.properties!.species), f.properties!.core ? 70 : 0),
+        getLineColor: (f: Feature) => rgba(color(f.properties!.species), f.properties!.core ? 0 : 255),
+        getLineWidth: 2,
+        lineWidthUnits: "pixels",
+        updateTriggers: { getFillColor: p.mode, getLineColor: p.mode },
+      }),
+    trails.paths.length > 0 &&
+      new PathLayer({
+        id: "collar-trails",
+        data: trails.paths,
+        getPath: (d: { path: [number, number][] }) => d.path,
+        getColor: (d: { species_name: string }) => rgba(color(d.species_name), 255),
+        getWidth: 2,
+        widthUnits: "pixels",
+        jointRounded: true,
+        capRounded: true,
+        updateTriggers: { getColor: p.mode },
+      }),
+    p.showOutliers &&
+      trails.outliers.length > 0 &&
+      new ScatterplotLayer<TrailFix>({
+        id: "collar-outliers",
+        data: trails.outliers,
+        pickable: true,
+        radiusUnits: "pixels",
+        getRadius: 6,
+        stroked: true,
+        filled: false,
+        lineWidthUnits: "pixels",
+        getLineWidth: 2,
+        getLineColor: rgba(DIVERGING.lost, 255),
+      }),
+    trails.heads.length > 0 &&
+      new ScatterplotLayer<TrailFix>({
+        id: "collar-heads",
+        data: trails.heads,
+        pickable: true,
+        radiusUnits: "pixels",
+        getRadius: 7,
+        stroked: true,
+        lineWidthUnits: "pixels",
+        getLineWidth: 2.5,
+        getLineColor: rgba(surface, 255),
+        getFillColor: (d) => rgba(color(d.species_name), 255),
+        updateTriggers: { getFillColor: p.mode, getLineColor: p.mode },
+      }),
+    // Labels carry identity: two collared elephants share the species colour.
+    trails.heads.length > 0 &&
+      new TextLayer<TrailFix>({
+        id: "collar-labels",
+        data: trails.heads,
+        getPosition: (d) => [d.lon, d.lat],
+        getText: (d) => d.code,
+        getSize: 12,
+        fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
+        fontWeight: 700,
+        getPixelOffset: [0, -16],
+        getColor: rgba(ink, 255),
+        outlineWidth: 3,
+        outlineColor: rgba(surface, 255),
+        fontSettings: { sdf: true },
+        updateTriggers: { getColor: p.mode, outlineColor: p.mode },
+      }),
   ].filter(Boolean);
 
   return (
@@ -338,6 +466,24 @@ function tooltip(info: PickingInfo) {
       const kind = o.properties.kind as string;
       const label = { gained: "Habitat gained (B − A)", lost: "Habitat lost (A − B)", a: "Period A range", b: "Period B range" }[kind]!;
       return { html: `<div class="tt-title">${label}</div>`, className: "deck-tooltip-card" };
+    }
+    case "collar-heads":
+    case "collar-outliers": {
+      const f = o as TrailFix;
+      return html(
+        [
+          ["Fix", new Date(f.t).toLocaleString()],
+          ...(f.outlier
+            ? ([["Status", "GPS outlier (excluded)"]] as [string, string][])
+            : ([["Last step", f.step_km != null ? `${fmtNum(f.step_km, 2)} km at ${fmtNum(f.speed_kmh, 1)} km/h` : "–"]] as [string, string][])),
+          ["HDOP", f.hdop != null ? fmtNum(f.hdop, 1) : "–"],
+        ],
+        `${f.code} · <i>${f.species_name}</i>`,
+      );
+    }
+    case "individual-range": {
+      const pr = o.properties;
+      return html([["Area", `${fmtNum(pr.area)} km²`]], `${pr.code} · ${pr.core ? "50% core area" : "MCP95 home range"}`);
     }
     case "trajectory-centroids":
     case "trajectory-arrows": {

@@ -170,6 +170,83 @@ const DEMO_USERS: { email: string; name: string; role: Role }[] = [
   { email: "citizen@biosphere.local", name: "Chris Citizen", role: "CITIZEN" },
 ];
 
+// 8. GPS-collared individuals: 2-hourly fixes, Jun–Oct 2026. Movement is an
+//    Ornstein–Uhlenbeck walk (random steps pulled back towards a moving centre), with a
+//    few injected GPS spikes so the outlier screen has something to catch.
+interface SeedIndividual {
+  code: string;
+  name: string | null;
+  species: string;
+  sex: "F" | "M";
+  collar: string;
+  centre: (dayOfSeason: number) => LonLat;
+  sigma: number; // step noise (degrees per fix)
+  pull: number; // strength of attraction to the centre per fix
+}
+const COLLAR_START = Date.UTC(2026, 5, 1); // 2026-06-01
+const COLLAR_DAYS = 140;
+const FIX_HOURS = 2;
+const COLLARED: SeedIndividual[] = [
+  {
+    code: "E-017", name: "Naserian", species: "Loxodonta africana", sex: "F", collar: "VEC-44871",
+    centre: () => [35.02, -1.42], sigma: 0.006, pull: 0.02,
+  },
+  {
+    // Shifts range mid-season, from the Mara triangle to the northern Serengeti.
+    code: "E-023", name: "Lemayian", species: "Loxodonta africana", sex: "M", collar: "VEC-44902",
+    centre: (d) => (d < 70 ? [34.85, -1.35] : [34.95, -1.75]), sigma: 0.008, pull: 0.015,
+  },
+  {
+    code: "W-104", name: null, species: "Connochaetes taurinus", sex: "F", collar: "LOT-2210",
+    // Follows the migration loop (season day → fraction of the Nov-anchored year).
+    centre: (d) => alongLoop(migrationLoop, ((COLLAR_START - START) / DAY_MS + d) / DAYS % 1), sigma: 0.012, pull: 0.04,
+  },
+];
+
+function collarTrack(ind: SeedIndividual) {
+  const fixes: { t: string; lon: number; lat: number; hdop: number }[] = [];
+  let [lon, lat] = ind.centre(0);
+  const total = (COLLAR_DAYS * 24) / FIX_HOURS;
+  for (let i = 0; i < total; i++) {
+    const day = (i * FIX_HOURS) / 24;
+    const [cx, cy] = ind.centre(day);
+    lon += ind.pull * (cx - lon) + gauss() * ind.sigma;
+    lat += ind.pull * (cy - lat) + gauss() * ind.sigma;
+    if (rand() < 0.04) continue; // missed fix (canopy, collar sleep)
+    // ~0.4% of fixes are multipath / 2D-fix errors 5–25 km off the true position.
+    const angle = rand() * 2 * Math.PI;
+    const offset = 0.05 + rand() * 0.17;
+    const spike = rand() < 0.004 ? [Math.cos(angle) * offset, Math.sin(angle) * offset] : [0, 0];
+    fixes.push({
+      t: new Date(COLLAR_START + i * FIX_HOURS * 3_600_000 + Math.round(gauss() * 60_000)).toISOString(),
+      lon: round(lon + spike[0]),
+      lat: round(lat + spike[1]),
+      hdop: Math.round((0.8 + rand() * (spike[0] ? 8 : 2.5)) * 10) / 10,
+    });
+  }
+  return fixes;
+}
+
+async function seedCollars() {
+  await sql`DELETE FROM individuals WHERE code IN ${sql(COLLARED.map((c) => c.code))}`;
+  let total = 0;
+  for (const c of COLLARED) {
+    const [ind] = await sql`
+      INSERT INTO individuals (code, species_name, name, sex, collar_id)
+      VALUES (${c.code}, ${c.species}, ${c.name}, ${c.sex}, ${c.collar})
+      RETURNING id
+    `;
+    const fixes = collarTrack(c);
+    await sql`
+      INSERT INTO telemetry_fixes (individual_id, recorded_at, location, hdop)
+      SELECT ${ind.id}, r.t, ST_SetSRID(ST_MakePoint(r.lon, r.lat), 4326), r.hdop
+      FROM jsonb_to_recordset(${sql.json(fixes)}::jsonb) AS r(t timestamptz, lon float8, lat float8, hdop real)
+    `;
+    total += fixes.length;
+  }
+  console.log(`collared individuals: ${COLLARED.map((c) => c.code).join(", ")} (${total} fixes)`);
+}
+
 async function seed() {
   if (process.env.NODE_ENV === "production") throw new Error("Refusing to seed a production database");
   for (const u of DEMO_USERS) {
@@ -188,6 +265,7 @@ async function seed() {
     inserted += result.inserted.length;
   }
   console.log(`removed ${deleted.count} old seed rows, inserted ${inserted} observations`);
+  await seedCollars();
 }
 
 seed()
