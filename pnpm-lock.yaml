@@ -25,6 +25,9 @@ importers:
       '@fastify/websocket':
         specifier: ^11.3.4
         version: 11.3.4
+      cloudinary:
+        specifier: ^2.11.0
+        version: 2.11.0
       fastify:
         specifier: ^5.12.7
         version: 5.12.7
@@ -911,6 +914,10 @@ packages:
   client-only@0.0.1:
     resolution: {integrity: sha512-IV3Ou0jSMzZrd3pZ48nLkT9DA7Ag1pnPzaiQhpW7c3RbcqqzvzzVu+L8gfqMp/8IM2MQtSiqaCxrrcfu8I8rMA==}
 
+  cloudinary@2.11.0:
+    resolution: {integrity: sha512-o2pAkDDqrzPFE/mn9GCfFjBIGQmPs++Ts6rtkFl4vY528DNHiMovKWjH16HBjeGa9iwI7eAad24aWN2emT0aww==}
+    engines: {node: '>=9'}
+
   cookie@2.0.1:
     resolution: {integrity: sha512-yuToqVvRrj6pfDXREyQAAv8SkAEk/8GS3jQRTiUMm66TVtBYmqQeoEjL2Lmq8Rpo6271vH76InTChTitEAm65w==}
     engines: {node: '>=22'}
@@ -1064,6 +1071,9 @@ packages:
 
   light-my-request@6.8.0:
     resolution: {integrity: sha512-5Q8PjoSEdtGIB8fikZsTem5vgRo4F2mR6vUKTDW/H1g6MtAt8e3duQbg/QxL5yzg6BZhor2KOUm3hhWMWLTZwg==}
+
+  lodash@4.18.1:
+    resolution: {integrity: sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q==}
 
   maplibre-gl@6.16.0:
     resolution: {integrity: sha512-gApO66EMtoDZuio680RUBvskR7ahFd/NNhLN4tBAs+Y7FeT4gQV8zVFgYVMRmFxQznOEzecW19w6xOd9XjZjiA==}
@@ -2054,6 +2064,10 @@ snapshots:
 
   client-only@0.0.1: {}
 
+  cloudinary@2.11.0:
+    dependencies:
+      lodash: 4.18.1
+
   cookie@2.0.1: {}
 
   csstype@3.2.3: {}
@@ -2241,6 +2255,8 @@ snapshots:
       cookie: 2.0.1
       process-warning: 5.1.1
       set-cookie-parser: 3.2.1
+
+  lodash@4.18.1: {}
 
   maplibre-gl@6.16.0:
     dependencies:
