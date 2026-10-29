@@ -405,13 +405,26 @@ describe("collar telemetry", () => {
   });
 
   test("home range uses clean fixes and reports the 50% core", async () => {
-    const res = await get("RANGER", `/individuals/${id}/home-range?core=100`);
+    const res = await get("RANGER", `/individuals/${id}/home-range?method=convex&core=100`);
     assert.equal(res.statusCode, 200);
     const hr = res.json();
     assert.equal(hr.fixes_used, 29);
     assert.ok(hr.core50_area_sq_km <= hr.area_sq_km);
     const empty = await get("RANGER", `/individuals/${id}/home-range?from=2020-01-01T00:00:00Z&to=2020-02-01T00:00:00Z`);
     assert.equal(empty.statusCode, 422);
+  });
+
+  test("KDE is the default home range and excludes the GPS spike", async () => {
+    const res = await get("RANGER", `/individuals/${id}/home-range`);
+    assert.equal(res.statusCode, 200);
+    const hr = res.json();
+    assert.equal(hr.method, "kde");
+    assert.equal(hr.fixes_used, 29);
+    assert.ok(hr.bandwidth_m > 0);
+    assert.ok(hr.core50_area_sq_km < hr.area_sq_km);
+    // fixes_used = 29 shows the spike was excluded; the 95% isopleth must span the whole track.
+    const lons = hr.geometry.coordinates.flat(2).map(([lon]: number[]) => lon);
+    assert.ok(Math.min(...lons) < 35 && Math.max(...lons) > 35.29, `${Math.min(...lons)}–${Math.max(...lons)}`);
   });
 });
 

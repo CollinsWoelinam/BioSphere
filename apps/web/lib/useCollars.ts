@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { telemetry, type Individual, type IndividualRange, type SessionUser, type Track } from "./api";
+import { telemetry, type Individual, type IndividualRange, type RangeMethod, type SessionUser, type Track } from "./api";
 
 /** Collar telemetry state for staff viewers. Citizens never request it (the API would 403). */
 export function useCollars(user: SessionUser) {
@@ -10,6 +10,7 @@ export function useCollars(user: SessionUser) {
   const [tracks, setTracks] = useState<Record<string, Track>>({});
   const [ranges, setRanges] = useState<Record<string, IndividualRange>>({});
   const [showOutliers, setShowOutliers] = useState(false);
+  const [rangeMethod, setRangeMethodState] = useState<RangeMethod>("kde");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -45,8 +46,23 @@ export function useCollars(user: SessionUser) {
     async (id: string) => {
       if (ranges[id]) return setRanges(({ [id]: _, ...rest }) => rest);
       try {
-        const r = await telemetry.homeRange(id);
+        const r = await telemetry.homeRange(id, rangeMethod);
         setRanges((prev) => ({ ...prev, [id]: r }));
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    },
+    [ranges, rangeMethod],
+  );
+
+  /** Switching method recomputes every range currently shown. */
+  const setRangeMethod = useCallback(
+    async (m: RangeMethod) => {
+      setRangeMethodState(m);
+      const ids = Object.keys(ranges);
+      try {
+        const next = await Promise.all(ids.map(async (id) => [id, await telemetry.homeRange(id, m)] as const));
+        setRanges(Object.fromEntries(next));
       } catch (e) {
         setError((e as Error).message);
       }
@@ -54,7 +70,7 @@ export function useCollars(user: SessionUser) {
     [ranges],
   );
 
-  return { staff, individuals, selected, tracks: visibleTracks, ranges, toggleTrack, toggleRange, showOutliers, setShowOutliers, error };
+  return { staff, individuals, selected, tracks: visibleTracks, ranges, toggleTrack, toggleRange, rangeMethod, setRangeMethod, showOutliers, setShowOutliers, error };
 }
 
 export type Collars = ReturnType<typeof useCollars>;

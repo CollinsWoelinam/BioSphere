@@ -21,6 +21,7 @@
     "@fastify/rate-limit": "^11.2.1",
     "@fastify/websocket": "^11.3.4",
     "cloudinary": "^2.11.0",
+    "d3-contour": "^4.0.2",
     "fastify": "^5.12.7",
     "fastify-plugin": "^6.0.1",
     "postgres": "^3.4.9",
@@ -28,6 +29,8 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@types/d3-contour": "^3.0.6",
+    "@types/geojson": "^7946.0.16",
     "@types/node": "^26.6.5",
     "@types/ws": "^8.18.2",
     "tsx": "^4.23.15",
