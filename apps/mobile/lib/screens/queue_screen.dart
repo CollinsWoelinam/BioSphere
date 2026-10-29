@@ -66,7 +66,13 @@ class QueueScreen extends StatelessWidget {
       leading: Icon(s.isInvasive ? Icons.grass : Icons.pets),
       title: Text(s.speciesName, style: const TextStyle(fontStyle: FontStyle.italic)),
       subtitle: Text('${fmt.format(s.timestamp.toLocal())} · ×${s.individualCount}'
-          '${s.accuracyM != null ? ' · ±${s.accuracyM!.toStringAsFixed(0)} m' : ''}'),
+          '${s.accuracyM != null ? ' · ±${s.accuracyM!.toStringAsFixed(0)} m' : ''}'
+          '${switch (s.photoState) {
+            PhotoState.pending => ' · photo queued',
+            PhotoState.uploaded => ' · photo uploaded',
+            PhotoState.rejected => ' · photo rejected',
+            PhotoState.none => '',
+          }}'),
       trailing: Tooltip(
         message: s.isSynced ? 'Synced' : 'Waiting to sync',
         child: Icon(s.isSynced ? Icons.cloud_done : Icons.cloud_upload_outlined,

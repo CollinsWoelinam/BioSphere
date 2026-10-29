@@ -38,7 +38,11 @@ export async function observationRoutes(app: FastifyInstance) {
         CASE WHEN generalized THEN NULL ELSE accuracy_m END AS accuracy_m,
         altitude_m, individual_count,
         CASE WHEN generalized THEN NULL ELSE habitat_notes END AS habitat_notes,
-        device_id, observed_at, generalized
+        device_id, observed_at, generalized,
+        -- Photos of sensitive species are hidden from viewers who get generalised points.
+        CASE WHEN generalized THEN 0
+          ELSE (SELECT count(*)::int FROM observation_photos p WHERE p.observation_id = o.id)
+        END AS photo_count
       FROM (
         SELECT *, ${locationFor(sql, v)} AS loc, ${generalizedFor(sql, v)} AS generalized
         FROM species_observations

@@ -82,6 +82,10 @@ Every endpoint except `/health` and `/auth/*` needs a bearer token (JWT). The li
   - return a 403 if requested by name in an analysis.
 - **Identity comes from the account.** `observer_type` and `observer_id` are set from the token, never from the request body, and the species registry decides whether a sighting counts as invasive.
 - **Long-lived tokens.** Tokens last 30 days by default (`JWT_TTL`), so rangers can work offline for long stretches. If a token expires mid-trip, the field app keeps its queue and asks the user to sign in again before uploading.
+- **Revocation.** Tokens carry only the user id and a `token_version`. The account is loaded on every request, so:
+  - role changes apply immediately;
+  - disabled accounts are rejected straight away;
+  - `POST /auth/logout-all`, or an admin role change or disable, invalidates every outstanding token for that user.
 - **Rate limits.** `/auth/login` and `/auth/register` allow 10 requests per minute per IP. Passwords are hashed with scrypt.
 
 To create staff accounts from the terminal:
@@ -92,6 +96,15 @@ pnpm --filter @biosphere/api user:create -- --email ana@park.org --name "Ana M."
 ```
 
 For production, set `NODE_ENV=production` and a strong `JWT_SECRET` (`openssl rand -base64 48`). The API refuses to start without the secret, and the seed script refuses to run.
+
+## Photos
+
+The field app uploads photos after their sighting is accepted, using `PUT` with a client-generated photo id so retries are safe. The API re-encodes every upload with `sharp`:
+- It auto-rotates the image, caps it at 2400 px and saves it as JPEG with a 400 px thumbnail.
+- It drops **all metadata**. EXIF GPS would otherwise reveal exactly the locations that grid snapping hides. Camera serial numbers go too.
+- It rejects anything that doesn't decode as an image (415), whatever content type was claimed.
+
+Citizens can't view photos of sensitive species at all, because a photo's background can identify the place. Files are stored under `PHOTO_DIR` (default `apps/api/data/photos`, git-ignored), named by photo id. The portal shows photos in a sighting detail panel when you click a point.
 
 ## Data model
 
@@ -124,7 +137,12 @@ All list endpoints accept these filters: `species` (comma-separated), `from` and
 | `GET` | `/health` | Liveness check, including the PostGIS and GEOS versions (public). |
 | `POST` | `/auth/login` · `/auth/register` | Returns `{token, user}`. Register always creates a `CITIZEN` (public, rate-limited). |
 | `GET` | `/auth/me` | The signed-in account. |
-| `POST` | `/auth/users` | Admin only: create a staff account with any role. |
+| `POST` | `/auth/logout-all` | Revokes every token issued to the caller (e.g. after losing a phone). |
+| `GET` · `POST` | `/auth/users` | Admin only: list accounts, or create a staff account with any role. |
+| `PATCH` | `/auth/users/:id` | Admin only: change `role` or set `disabled`. Either revokes that user's tokens. |
+| `PUT` | `/observations/:id/photos/:photoId` | Multipart `photo` upload by the sighting's observer (or an admin). Idempotent on the client-generated `photoId`. |
+| `GET` | `/observations/:id/photos` · `/photos/:photoId[?size=thumb]` | List or fetch photos (JPEG). Citizens get 403 for sensitive species. |
+| `DELETE` | `/photos/:photoId` | Remove a photo (observer or admin). |
 
 ## Web portal
 
@@ -140,6 +158,7 @@ All list endpoints accept these filters: `species` (comma-separated), `from` and
 - **Offline maps.** In Settings → *Import .mbtiles*, choose a raster MBTiles file. It is copied into app storage and rendered by `flutter_map_mbtiles`. Without one, the app uses online OSM tiles.
 - **Precision tagging.** The log screen streams GPS fixes and keeps the best one until it reaches ±5 m (or 30 s pass). It shows a quality rating and accuracy, and the accuracy is stored with the sighting.
 - **Accounts.** Signing in needs a connection once. After that the app works offline for the token's lifetime. The token is stored in the iOS Keychain or Android Keystore. Each queued sighting records which account created it, so a shared device never uploads one person's records under another's name.
+- **Photo upload.** Photos queue locally and upload once their sighting is accepted. The queue shows each photo as queued, uploaded or rejected. A file the server permanently refuses, or one deleted from the device, is marked rejected rather than retried.
 - **Offline-first sync.** Every sighting goes to SQLite first. The queue uploads in batches of 200 when you save a sighting, when connectivity returns, every 5 minutes, and with exponential backoff (30 s to 15 min) after failures.
 - **Identification guide.** 12 bundled species: the six seeded taxa plus key threatened fauna and invasive plants. Each entry has IUCN status, identification features, look-alikes and a field protocol.
 
@@ -164,7 +183,7 @@ apps/mobile/lib/      models/, data/ (SQLite store, guide), services/ (sync, GPS
 
 ## Next steps
 
-- **Auth hardening:** refresh tokens and token revocation, an admin UI for accounts and the species registry, and optional OIDC single sign-on for partner organisations.
-- **Photo upload:** send photos to object storage and link them to observations. Photos are currently kept on the device only.
+- **Admin UI** for accounts and the species registry (the API endpoints exist). Optional OIDC single sign-on for partner organisations.
+- **Object storage for photos:** an S3-compatible backend for multi-instance deployments. Photos currently go to local disk.
 - **Vector tiles:** serve tiles straight from PostGIS with [Martin](https://martin.maplibre.org/) once data grows past what one `/observations` response can hold. PMTiles would cover offline vector basemaps.
 - **Movement ecology on collared individuals:** add `individual_id` to the schema to support per-animal tracks, Brownian-bridge home ranges and step-selection analysis.
