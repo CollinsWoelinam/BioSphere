@@ -11,7 +11,8 @@
     "migrate": "tsx --env-file-if-exists=.env src/migrate.ts",
     "seed": "tsx --env-file-if-exists=.env src/seed.ts",
     "test": "tsx --env-file-if-exists=.env --test test/*.test.ts",
-    "user:create": "tsx --env-file-if-exists=.env src/create-user.ts"
+    "user:create": "tsx --env-file-if-exists=.env src/create-user.ts",
+    "photos:to-cloudinary": "tsx --env-file-if-exists=.env src/migrate-photos.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.1",
@@ -19,6 +20,7 @@
     "@fastify/multipart": "^10.1.6",
     "@fastify/rate-limit": "^11.2.1",
     "@fastify/websocket": "^11.3.4",
+    "cloudinary": "^2.11.0",
     "fastify": "^5.12.7",
     "fastify-plugin": "^6.0.1",
     "postgres": "^3.4.9",

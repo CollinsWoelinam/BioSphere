@@ -106,12 +106,35 @@ For production, set `NODE_ENV=production` and a strong `JWT_SECRET` (`openssl ra
 
 ## Photos
 
-The field app uploads photos after their sighting is accepted, using `PUT` with a client-generated photo id so retries are safe. The API re-encodes every upload with `sharp`:
-- It auto-rotates the image, caps it at 2400 px and saves it as JPEG with a 400 px thumbnail.
+The field app uploads photos after their sighting is accepted, using `PUT` with a client-generated photo id so retries are safe. Before anything is stored, the API re-encodes every upload with `sharp`:
+- It auto-rotates the image, caps it at 2400 px and saves it as JPEG.
 - It drops **all metadata**. EXIF GPS would otherwise reveal exactly the locations that grid snapping hides. Camera serial numbers go too.
 - It rejects anything that doesn't decode as an image (415), whatever content type was claimed.
 
-Citizens can't view photos of sensitive species at all, because a photo's background can identify the place. Files are stored under `PHOTO_DIR` (default `apps/api/data/photos`, git-ignored), named by photo id. The portal shows photos in a sighting detail panel when you click a point.
+Citizens can't view photos of sensitive species at all, because a photo's background can identify the place. The portal shows photos in a sighting detail panel when you click a point.
+
+### Storage backends (`PHOTO_STORAGE`)
+
+| Backend | Setting | Notes |
+| --- | --- | --- |
+| Local disk | `PHOTO_STORAGE=local` (default) | Files go under `PHOTO_DIR` (default `apps/api/data/photos`, git-ignored), with a pre-rendered 400 px thumbnail. Suits development and a single server. |
+| Cloudinary | `PHOTO_STORAGE=cloudinary` + `CLOUDINARY_URL` | Photos are uploaded as **`authenticated`** assets under `CLOUDINARY_FOLDER` (default `biosphere/photos`), and thumbnails are a Cloudinary transformation. |
+
+With Cloudinary, browsers never receive Cloudinary URLs:
+- The API checks permissions, then fetches the image server-side through a signed URL and streams it to the browser.
+- Signed delivery URLs don't expire on standard Cloudinary plans, so passing them to browsers would turn any leaked link to a rhino photo into a permanent one.
+- Because the API sits in the middle, the same access rules apply whichever backend is used.
+
+To switch an existing deployment from local disk to Cloudinary:
+
+```bash
+# CLOUDINARY_URL is under Cloudinary console → Settings → API Keys
+echo 'CLOUDINARY_URL=cloudinary://<api_key>:<api_secret>@<cloud_name>' >> apps/api/.env
+pnpm --filter @biosphere/api photos:to-cloudinary   # copies existing photos; safe to re-run
+# then set PHOTO_STORAGE=cloudinary in apps/api/.env and restart the API
+```
+
+The API refuses to start with `PHOTO_STORAGE=cloudinary` and no `CLOUDINARY_URL`. When Cloudinary is unreachable, photo requests return 502 and the rest of the API keeps working.
 
 ## Data model
 
@@ -193,6 +216,5 @@ apps/mobile/lib/      models/, data/ (SQLite store, guide), services/ (sync, GPS
 ## Next steps
 
 - **Optional OIDC single sign-on** for partner organisations.
-- **Object storage for photos:** an S3-compatible backend for multi-instance deployments. Photos currently go to local disk.
 - **Vector tiles:** serve tiles straight from PostGIS with [Martin](https://martin.maplibre.org/) once data grows past what one `/observations` response can hold. PMTiles would cover offline vector basemaps.
 - **Movement ecology on collared individuals:** add `individual_id` to the schema to support per-animal tracks, Brownian-bridge home ranges and step-selection analysis.

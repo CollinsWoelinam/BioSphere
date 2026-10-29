@@ -8,7 +8,7 @@ import type { Role } from "../src/auth.js";
 import { buildApp } from "../src/app.js";
 import { sql } from "../src/db.js";
 import sharp from "sharp";
-import { deletePhotoFiles } from "../src/photos.js";
+import { deletePhoto } from "../src/photos.js";
 import { createUser } from "../src/users.js";
 
 const RUN = randomUUID().slice(0, 8);
@@ -78,7 +78,7 @@ before(async () => {
 });
 
 after(async () => {
-  await Promise.all(photoIds.map(deletePhotoFiles));
+  await Promise.all(photoIds.map(deletePhoto));
   await sql`DELETE FROM species_observations WHERE species_name IN (${SPECIES}, ${SENSITIVE})`;
   await sql`DELETE FROM species WHERE species_name IN (${SPECIES}, ${SENSITIVE})`;
   await sql`DELETE FROM audit_log WHERE target LIKE ${"%-" + RUN + "@test.local"}`;
