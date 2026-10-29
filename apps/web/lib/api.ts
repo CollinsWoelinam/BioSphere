@@ -195,6 +195,57 @@ export const admin = {
   audit: () => request<AuditEntry[]>("/admin/audit?limit=200"),
 };
 
+export interface Individual {
+  id: string;
+  code: string;
+  name: string | null;
+  species_name: string;
+  sex: "F" | "M" | "U";
+  collar_id: string | null;
+  fixes: number;
+  first_fix: string | null;
+  last_fix: string | null;
+  last_position: [number, number] | null;
+}
+export interface TrackFix {
+  id: string;
+  t: number;
+  lon: number;
+  lat: number;
+  hdop: number | null;
+  outlier: boolean;
+  step_km: number | null;
+  speed_kmh: number | null;
+}
+export interface Track {
+  individual: Pick<Individual, "id" | "code" | "name" | "species_name">;
+  summary: {
+    fixes: number;
+    outliers: number;
+    days: number;
+    total_km: number;
+    km_per_day: number | null;
+    median_interval_h: number | null;
+    max_displacement_km: number;
+  };
+  fixes: TrackFix[];
+}
+export interface IndividualRange {
+  method: string;
+  core_percent: number;
+  fixes_used: number;
+  geometry: Geometry;
+  area_sq_km: number;
+  core50_geometry: Geometry;
+  core50_area_sq_km: number;
+}
+
+export const telemetry = {
+  individuals: () => request<Individual[]>("/individuals"),
+  track: (id: string) => request<Track>(`/individuals/${id}/track`),
+  homeRange: (id: string) => request<IndividualRange>(`/individuals/${id}/home-range?method=convex&core=95`),
+};
+
 export const api = {
   species: () => get<Species[]>("/species"),
   observations: (f: Filter, signal?: AbortSignal) =>

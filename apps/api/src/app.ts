@@ -11,6 +11,7 @@ import { addClient } from "./live.js";
 import { adminRoutes } from "./routes/admin.js";
 import { analysisRoutes } from "./routes/analysis.js";
 import { authRoutes } from "./routes/auth.js";
+import { individualRoutes } from "./routes/individuals.js";
 import { observationRoutes } from "./routes/observations.js";
 import { photoRoutes } from "./routes/photos.js";
 
@@ -59,6 +60,7 @@ export async function buildApp() {
     await secured.register(analysisRoutes);
     await secured.register(photoRoutes);
     await secured.register(adminRoutes);
+    await secured.register(individualRoutes);
   });
 
   return app;

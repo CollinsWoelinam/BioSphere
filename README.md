@@ -136,6 +136,26 @@ pnpm --filter @biosphere/api photos:to-cloudinary   # copies existing photos; sa
 
 The API refuses to start with `PHOTO_STORAGE=cloudinary` and no `CLOUDINARY_URL`. When Cloudinary is unreachable, photo requests return 502 and the rest of the API keeps working.
 
+## Collared animals (GPS telemetry)
+
+Individually identified animals live in `individuals`, and their collar fixes in `telemetry_fixes`. Fixes are kept apart from `species_observations`. A collar logs every hour or two whether or not anyone sees the animal, so mixing the two would swamp species heatmaps and hulls with a few animals' paths.
+
+- **Staff only.** Collared animals are prime poaching targets, so citizens get 403 on every `/individuals` route. Admins and researchers create individuals and import fixes; rangers can view them.
+- **Import.** `POST /individuals/:id/fixes` accepts Movebank CSV (`timestamp, location-long, location-lat, gps:hdop`; send `Content-Type: text/csv`) or JSON `{fixes: [{t, lon, lat, hdop}]}`.
+  - Fixes are unique per (animal, time), so overlapping collar downloads can be re-imported safely.
+  - Invalid rows are rejected and reported, without failing the whole import.
+- **GPS-error screen** (after Bjørneraas et al. 2010). A fix is an outlier if both its legs exceed `max_speed_kmh` (default 15), or if both legs are fast and the path goes out and straight back. Speed alone misses spikes at long fix intervals: a 10 km error over 2 h looks like a plausible 5 km/h. Small errors of a few km are indistinguishable from real movement at 2-hour fixes, so they pass.
+- **`GET /individuals/:id/track`** returns each fix with its outlier flag, step distance and speed, plus a summary: total km, km/day, median fix interval, maximum displacement from the first fix, and outliers removed.
+- **`GET /individuals/:id/home-range`** returns an MCP (or concave) home range over clean fixes at the requested core % (default 95), plus the 50% core area.
+
+In the portal, staff see a **Collared animals** sidebar section:
+- Ticking an animal flies the map to its track and shows its movement stats.
+- Trails follow the time cursor and window, so playback animates them alongside sightings.
+- Each animal's code is labelled at its latest position, because two animals can share a species colour.
+- You can show the MCP95 home range with its shaded 50% core, and the rejected GPS fixes as rings.
+
+`pnpm db:seed` adds three animals with two-hourly fixes for June–October 2026: E-017 (resident elephant), E-023 (elephant that shifts range mid-season) and W-104 (migrating wildebeest).
+
 ## Data model
 
 [`db/migrations/001_init.sql`](db/migrations/001_init.sql) contains the spec's `species_observations` table plus a few field-data columns:
@@ -217,4 +237,4 @@ apps/mobile/lib/      models/, data/ (SQLite store, guide), services/ (sync, GPS
 
 - **Optional OIDC single sign-on** for partner organisations.
 - **Vector tiles:** serve tiles straight from PostGIS with [Martin](https://martin.maplibre.org/) once data grows past what one `/observations` response can hold. PMTiles would cover offline vector basemaps.
-- **Movement ecology on collared individuals:** add `individual_id` to the schema to support per-animal tracks, Brownian-bridge home ranges and step-selection analysis.
+- **Density-based home ranges for collared animals:** kernel density or Brownian-bridge utilisation distributions. MCP cores are measured from the centroid, which misplaces the 50% core for animals that use two separate areas (E-023's core falls in the gap between them). Step-selection analysis and live collar feeds (Movebank API) would follow.
