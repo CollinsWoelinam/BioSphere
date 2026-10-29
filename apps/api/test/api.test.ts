@@ -81,9 +81,23 @@ after(async () => {
   await Promise.all(photoIds.map(deletePhotoFiles));
   await sql`DELETE FROM species_observations WHERE species_name IN (${SPECIES}, ${SENSITIVE})`;
   await sql`DELETE FROM species WHERE species_name IN (${SPECIES}, ${SENSITIVE})`;
+  await sql`DELETE FROM audit_log WHERE target LIKE ${"%-" + RUN + "@test.local"}`;
   await sql`DELETE FROM users WHERE email LIKE ${"%-" + RUN + "@test.local"}`;
   await app.close();
   await sql.end();
+});
+
+describe("CORS", () => {
+  test("browsers may use every method the API exposes", async () => {
+    const res = await app.inject({
+      method: "OPTIONS",
+      url: "/admin/species/x",
+      headers: { origin: "http://localhost:3000", "access-control-request-method": "PATCH" },
+    });
+    for (const m of ["PUT", "PATCH", "DELETE"]) {
+      assert.ok(String(res.headers["access-control-allow-methods"]).includes(m), m);
+    }
+  });
 });
 
 describe("auth", () => {
@@ -276,6 +290,50 @@ describe("photos", () => {
     assert.equal((await get("CITIZEN", `/photos/${photoId}`)).statusCode, 403);
     assert.equal((await get("CITIZEN", `/observations/${rhinoId}/photos`)).statusCode, 403);
     assert.equal((await get("RANGER", `/photos/${photoId}`)).statusCode, 200);
+  });
+});
+
+describe("admin species registry", () => {
+  const ADMIN_SPECIES = `Adminus ${RUN}`;
+  const put = (role: Role, body: object) =>
+    app.inject({ method: "PUT", url: `/admin/species/${encodeURIComponent(ADMIN_SPECIES)}`, payload: body, headers: as(role) });
+
+  before(async () => {
+    await post("RANGER", "/observations", point(35.1234, -2.3456, 4, ADMIN_SPECIES));
+  });
+  after(async () => {
+    await sql`DELETE FROM species_observations WHERE species_name = ${ADMIN_SPECIES}`;
+    await sql`DELETE FROM species WHERE species_name = ${ADMIN_SPECIES}`;
+    await sql`DELETE FROM audit_log WHERE target = ${ADMIN_SPECIES}`;
+  });
+
+  test("is admin-only", async () => {
+    assert.equal((await get("RANGER", "/admin/species")).statusCode, 403);
+    assert.equal((await put("CITIZEN", { is_sensitive: true })).statusCode, 403);
+    assert.equal((await get("ADMIN", "/admin/species")).statusCode, 200);
+  });
+
+  test("marking a species sensitive generalises it for citizens immediately", async () => {
+    const url = `/observations?species=${encodeURIComponent(ADMIN_SPECIES)}`;
+    assert.equal((await get("CITIZEN", url)).json().features[0].geometry.coordinates[0], 35.1234);
+    assert.equal((await put("ADMIN", { is_sensitive: true })).statusCode, 200);
+    const f = (await get("CITIZEN", url)).json().features[0];
+    assert.deepEqual(f.geometry.coordinates, [35.1, -2.3]);
+    assert.equal(f.properties.generalized, true);
+  });
+
+  test("changing is_invasive updates existing sightings", async () => {
+    await put("ADMIN", { is_invasive: true });
+    const [row] = await sql`SELECT bool_and(is_invasive) AS all_invasive FROM species_observations WHERE species_name = ${ADMIN_SPECIES}`;
+    assert.equal(row.all_invasive, true);
+  });
+
+  test("registry changes are audited with before/after", async () => {
+    const entries = (await get("ADMIN", "/admin/audit?limit=500")).json().filter((e: { target: string }) => e.target === ADMIN_SPECIES);
+    assert.ok(entries.length >= 2);
+    const sensitive = entries.find((e: { details: { after: { is_sensitive: boolean } } }) => e.details.after.is_sensitive);
+    assert.equal(sensitive.action, "species.update");
+    assert.equal(sensitive.actor_email, `admin-${RUN}@test.local`);
   });
 });
 

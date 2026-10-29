@@ -95,6 +95,13 @@ pnpm --filter @biosphere/api user:create -- --email ana@park.org --name "Ana M."
 # prints a generated password unless --password is given
 ```
 
+### Admin console
+
+Admins have an **Admin** link in the portal sidebar, which opens `/admin`. It has three tabs:
+- **Accounts:** create staff accounts, change roles, and disable or re-enable users. Role changes and disabling sign the user out everywhere.
+- **Species registry:** toggle invasive and sensitive. You can also mark a species sensitive *before* its first sighting is recorded. Turning protection off asks for confirmation. Changing the invasive flag also updates that species' existing sightings.
+- **Audit log:** every account and registry change, with who made it and the before/after values.
+
 For production, set `NODE_ENV=production` and a strong `JWT_SECRET` (`openssl rand -base64 48`). The API refuses to start without the secret, and the seed script refuses to run.
 
 ## Photos
@@ -137,6 +144,8 @@ All list endpoints accept these filters: `species` (comma-separated), `from` and
 | `GET` | `/health` | Liveness check, including the PostGIS and GEOS versions (public). |
 | `POST` | `/auth/login` · `/auth/register` | Returns `{token, user}`. Register always creates a `CITIZEN` (public, rate-limited). |
 | `GET` | `/auth/me` | The signed-in account. |
+| `GET` · `PUT` | `/admin/species[/:name]` | Admin only: the species registry, and create/update `is_invasive` / `is_sensitive` (audited). |
+| `GET` | `/admin/audit` | Admin only: the latest audit-log entries. |
 | `POST` | `/auth/logout-all` | Revokes every token issued to the caller (e.g. after losing a phone). |
 | `GET` · `POST` | `/auth/users` | Admin only: list accounts, or create a staff account with any role. |
 | `PATCH` | `/auth/users/:id` | Admin only: change `role` or set `disabled`. Either revokes that user's tokens. |
@@ -183,7 +192,7 @@ apps/mobile/lib/      models/, data/ (SQLite store, guide), services/ (sync, GPS
 
 ## Next steps
 
-- **Admin UI** for accounts and the species registry (the API endpoints exist). Optional OIDC single sign-on for partner organisations.
+- **Optional OIDC single sign-on** for partner organisations.
 - **Object storage for photos:** an S3-compatible backend for multi-instance deployments. Photos currently go to local disk.
 - **Vector tiles:** serve tiles straight from PostGIS with [Martin](https://martin.maplibre.org/) once data grows past what one `/observations` response can hold. PMTiles would cover offline vector basemaps.
 - **Movement ecology on collared individuals:** add `individual_id` to the schema to support per-animal tracks, Brownian-bridge home ranges and step-selection analysis.

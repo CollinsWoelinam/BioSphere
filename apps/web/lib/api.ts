@@ -161,6 +161,40 @@ export const auth = {
     request<Session>("/auth/register", { method: "POST", body: JSON.stringify({ name, email, password }) }),
 };
 
+export interface Account extends SessionUser {
+  disabled_at: string | null;
+  created_at: string;
+}
+export interface RegistryEntry {
+  species_name: string;
+  is_invasive: boolean;
+  is_sensitive: boolean;
+  sightings: number;
+  last_seen: string | null;
+}
+export interface AuditEntry {
+  id: number;
+  action: string;
+  target: string;
+  details: Record<string, unknown>;
+  created_at: string;
+  actor_email: string | null;
+}
+
+const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
+
+export const admin = {
+  users: () => request<Account[]>("/auth/users"),
+  createUser: (u: { name: string; email: string; password: string; role: Role }) =>
+    request<Account>("/auth/users", json("POST", u)),
+  updateUser: (id: string, patch: { role?: Role; disabled?: boolean }) =>
+    request<Account>(`/auth/users/${id}`, json("PATCH", patch)),
+  species: () => request<RegistryEntry[]>("/admin/species"),
+  updateSpecies: (name: string, patch: { is_invasive?: boolean; is_sensitive?: boolean }) =>
+    request<RegistryEntry>(`/admin/species/${encodeURIComponent(name)}`, json("PUT", patch)),
+  audit: () => request<AuditEntry[]>("/admin/audit?limit=200"),
+};
+
 export const api = {
   species: () => get<Species[]>("/species"),
   observations: (f: Filter, signal?: AbortSignal) =>

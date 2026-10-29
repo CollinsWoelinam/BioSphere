@@ -196,3 +196,20 @@ button.ghost { background: none; border: 0; cursor: pointer; font-size: 18px; li
 .photo-loading { background: var(--surface-2); }
 .lightbox { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.82); display: grid; place-items: center; z-index: 50; cursor: zoom-out; padding: 16px; }
 .lightbox-img { max-width: 100%; max-height: 100%; border-radius: 6px; }
+
+/* ---------- admin ---------- */
+.admin { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 16px; }
+.admin-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+.admin-head h1 { margin: 0; font-size: 22px; }
+.admin-head p { margin: 2px 0 0; }
+.admin-tabs { max-width: 480px; }
+.admin-section { display: grid; gap: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; overflow-x: auto; }
+.admin-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.admin-form h2 { width: 100%; margin: 0 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); }
+.admin-form input { flex: 1 1 180px; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; }
+.admin-table td, .admin-table th { padding-right: 12px; white-space: nowrap; }
+.admin-table tr.disabled td { color: var(--muted); }
+.admin-table select { padding: 3px 6px; }
+a.link { color: var(--accent); font-size: 12px; text-decoration: none; }
+a.link:hover { text-decoration: underline; }
+a.button-link { display: block; text-align: center; text-decoration: none; }
