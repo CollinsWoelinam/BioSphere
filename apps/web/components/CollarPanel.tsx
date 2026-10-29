@@ -38,8 +38,8 @@ export function CollarPanel({ collars, swatch }: { collars: Collars; swatch: (sp
                   <span className="muted">last fix {ind.last_fix ? fmtDate(ind.last_fix) : "–"}</span>
                   <button className="link" onClick={() => c.toggleRange(ind.id)}>
                     {range
-                      ? `MCP95 ${fmtNum(range.area_sq_km)} km² · core 50% ${fmtNum(range.core50_area_sq_km)} km² (hide)`
-                      : "Show home range (MCP95 + 50% core)"}
+                      ? `${range.method === "kde" ? "KDE" : "MCP"} 95% ${fmtNum(range.area_sq_km)} km² · 50% core ${fmtNum(range.core50_area_sq_km)} km² (hide)`
+                      : "Show home range (95% + 50% core)"}
                   </button>
                 </div>
               )}
@@ -47,6 +47,23 @@ export function CollarPanel({ collars, swatch }: { collars: Collars; swatch: (sp
           );
         })}
       </ul>
+      {Object.keys(c.tracks).length > 0 && (
+        <div className="field">
+          Home-range method
+          <div className="segmented small" role="radiogroup" aria-label="Home-range method">
+            <button role="radio" aria-checked={c.rangeMethod === "kde"} className={c.rangeMethod === "kde" ? "on" : ""} onClick={() => c.setRangeMethod("kde")}>
+              KDE (density)
+            </button>
+            <button role="radio" aria-checked={c.rangeMethod === "convex"} className={c.rangeMethod === "convex" ? "on" : ""} onClick={() => c.setRangeMethod("convex")}>
+              MCP
+            </button>
+          </div>
+          <small className="muted">
+            KDE follows where the animal spends time, so separate activity centres get separate cores. MCP is
+            comparable with older studies but can place the core between them.
+          </small>
+        </div>
+      )}
       {Object.keys(c.tracks).length > 0 && (
         <label className="switch-row">
           <span>

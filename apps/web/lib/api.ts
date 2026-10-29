@@ -230,8 +230,10 @@ export interface Track {
   };
   fixes: TrackFix[];
 }
+export type RangeMethod = "kde" | "convex";
 export interface IndividualRange {
-  method: string;
+  method: RangeMethod;
+  bandwidth_m?: number;
   core_percent: number;
   fixes_used: number;
   geometry: Geometry;
@@ -243,7 +245,8 @@ export interface IndividualRange {
 export const telemetry = {
   individuals: () => request<Individual[]>("/individuals"),
   track: (id: string) => request<Track>(`/individuals/${id}/track`),
-  homeRange: (id: string) => request<IndividualRange>(`/individuals/${id}/home-range?method=convex&core=95`),
+  homeRange: (id: string, method: RangeMethod) =>
+    request<IndividualRange>(`/individuals/${id}/home-range?method=${method}&core=95`),
 };
 
 export const api = {

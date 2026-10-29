@@ -179,8 +179,8 @@ export function MapView(p: Props) {
         const species = p.tracks[id]?.individual.species_name ?? "";
         const code = p.tracks[id]?.individual.code ?? "";
         return [
-          { type: "Feature", geometry: r.geometry, properties: { species, code, core: false, area: r.area_sq_km } },
-          { type: "Feature", geometry: r.core50_geometry, properties: { species, code, core: true, area: r.core50_area_sq_km } },
+          { type: "Feature", geometry: r.geometry, properties: { species, code, core: false, area: r.area_sq_km, method: r.method } },
+          { type: "Feature", geometry: r.core50_geometry, properties: { species, code, core: true, area: r.core50_area_sq_km, method: r.method } },
         ] as Feature[];
       }),
     [p.individualRanges, p.tracks],
@@ -483,7 +483,8 @@ function tooltip(info: PickingInfo) {
     }
     case "individual-range": {
       const pr = o.properties;
-      return html([["Area", `${fmtNum(pr.area)} km²`]], `${pr.code} · ${pr.core ? "50% core area" : "MCP95 home range"}`);
+      const method = pr.method === "kde" ? "KDE" : "MCP";
+      return html([["Area", `${fmtNum(pr.area)} km²`]], `${pr.code} · ${method} ${pr.core ? "50% core area" : "95% home range"}`);
     }
     case "trajectory-centroids":
     case "trajectory-arrows": {

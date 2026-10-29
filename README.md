@@ -146,13 +146,21 @@ Individually identified animals live in `individuals`, and their collar fixes in
   - Invalid rows are rejected and reported, without failing the whole import.
 - **GPS-error screen** (after Bjørneraas et al. 2010). A fix is an outlier if both its legs exceed `max_speed_kmh` (default 15), or if both legs are fast and the path goes out and straight back. Speed alone misses spikes at long fix intervals: a 10 km error over 2 h looks like a plausible 5 km/h. Small errors of a few km are indistinguishable from real movement at 2-hour fixes, so they pass.
 - **`GET /individuals/:id/track`** returns each fix with its outlier flag, step distance and speed, plus a summary: total km, km/day, median fix interval, maximum displacement from the first fix, and outliers removed.
-- **`GET /individuals/:id/home-range`** returns an MCP (or concave) home range over clean fixes at the requested core % (default 95), plus the 50% core area.
+- **`GET /individuals/:id/home-range`** returns the range at the requested `core` % (default 95) plus the 50% core, computed from clean fixes:
+  - **`method=kde` (default):** a fixed-kernel utilisation distribution (Worton 1989), with isopleths drawn by marching squares (`d3-contour`).
+    - Bandwidth is the reference *h*ref × `h_scale` (default 1). *h*ref oversmooths multimodal ranges; 0.5–0.8 is common in the literature.
+    - The response includes `bandwidth_m`.
+    - Areas are the summed grid cells inside each isopleth.
+    - Tests check the 95% and 50% areas against the closed form for a bivariate normal; it agrees within 1–5% depending on sample size.
+  - **`method=convex` / `concave`:** MCP or concave hull of the `core`% fixes nearest the centroid. It's comparable with older studies, but for an animal using two areas it puts the "core" in the empty gap between them.
+  - On the seed data, E-023's KDE 50% core is two patches (338 km²), where MCP draws one 666 km² band across the corridor. For single-area E-017, the two methods agree (159 vs 155 km² at 95%).
+  - KDE assumes independent fixes. Regular collar fixes are autocorrelated, which mostly affects bandwidth selection rather than the isopleth shape.
 
 In the portal, staff see a **Collared animals** sidebar section:
 - Ticking an animal flies the map to its track and shows its movement stats.
 - Trails follow the time cursor and window, so playback animates them alongside sightings.
 - Each animal's code is labelled at its latest position, because two animals can share a species colour.
-- You can show the MCP95 home range with its shaded 50% core, and the rejected GPS fixes as rings.
+- You can show each animal's 95% home range with its shaded 50% core, as KDE (default) or MCP, and show the rejected GPS fixes as rings.
 
 `pnpm db:seed` adds three animals with two-hourly fixes for June–October 2026: E-017 (resident elephant), E-023 (elephant that shifts range mid-season) and W-104 (migrating wildebeest).
 
@@ -237,4 +245,4 @@ apps/mobile/lib/      models/, data/ (SQLite store, guide), services/ (sync, GPS
 
 - **Optional OIDC single sign-on** for partner organisations.
 - **Vector tiles:** serve tiles straight from PostGIS with [Martin](https://martin.maplibre.org/) once data grows past what one `/observations` response can hold. PMTiles would cover offline vector basemaps.
-- **Density-based home ranges for collared animals:** kernel density or Brownian-bridge utilisation distributions. MCP cores are measured from the centroid, which misplaces the 50% core for animals that use two separate areas (E-023's core falls in the gap between them). Step-selection analysis and live collar feeds (Movebank API) would follow.
+- **Movement-based home ranges:** Brownian-bridge or autocorrelated KDE, which model the path between fixes rather than treating fixes as independent. Step-selection analysis and live collar feeds (Movebank API) would follow.

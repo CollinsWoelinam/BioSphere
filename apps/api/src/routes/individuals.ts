@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { audit } from "../audit.js";
 import { sql, type Sql } from "../db.js";
+import { kdeHomeRange } from "../kde.js";
 import { corePercent, pctConvex } from "../schemas.js";
 
 const iso = z.iso.datetime({ offset: true });
@@ -274,12 +275,47 @@ export async function individualRoutes(app: FastifyInstance) {
     };
   });
 
-  /** Home range from cleaned fixes: hull at the requested core %, plus the 50% core area. */
+  /**
+   * Home range from cleaned fixes, as the `core`% range plus the 50% core area.
+   *  - kde (default): fixed-kernel utilisation distribution isopleths. Follows where the
+   *    animal actually spends time, so separate activity centres get separate cores.
+   *  - convex / concave: MCP or concave hull of the `core`% fixes nearest the centroid.
+   *    Cheap and comparable with older studies, but the centroid-based core is misplaced
+   *    for animals that use two areas.
+   */
   app.get("/individuals/:id/home-range", async (req, reply) => {
     const { id } = z.object({ id: z.uuid() }).parse(req.params);
     const q = range
-      .extend({ method: z.enum(["concave", "convex"]).default("convex"), pct: pctConvex, core: corePercent.default(95), max_speed_kmh: maxSpeed })
+      .extend({
+        method: z.enum(["kde", "concave", "convex"]).default("kde"),
+        pct: pctConvex,
+        core: corePercent.default(95),
+        h_scale: z.coerce.number().min(0.1).max(3).default(1),
+        max_speed_kmh: maxSpeed,
+      })
       .parse(req.query);
+
+    if (q.method === "kde") {
+      const fixes = (await screenedFixes(id, q.from, q.to, q.max_speed_kmh)).filter((f) => !f.outlier);
+      const kde = kdeHomeRange(
+        fixes.map((f) => ({ lon: f.lon as number, lat: f.lat as number })),
+        { hScale: q.h_scale, levels: [q.core, 50] },
+      );
+      if (!kde) return reply.code(422).send({ error: "Need at least 5 clean, non-identical fixes in this range" });
+      const [main, core50] = kde.isopleths;
+      return {
+        method: "kde",
+        core_percent: q.core,
+        fixes_used: fixes.length,
+        bandwidth_m: Math.round(kde.bandwidth_m),
+        h_scale: q.h_scale,
+        geometry: main.geometry,
+        area_sq_km: main.area_sq_km,
+        core50_geometry: core50.geometry,
+        core50_area_sq_km: core50.area_sq_km,
+      };
+    }
+
     const hull = (core: number) => sql`
       WITH pts AS (
         SELECT ST_SetSRID(ST_MakePoint(lon, lat), 4326) AS location
