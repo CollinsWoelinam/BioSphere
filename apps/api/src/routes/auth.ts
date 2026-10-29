@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { audit } from "../audit.js";
 import { ROLES, verifyPassword, type Role, type TokenPayload } from "../auth.js";
 import { sql } from "../db.js";
 import { createUser, type User } from "../users.js";
@@ -63,7 +64,11 @@ export async function authRoutes(app: FastifyInstance) {
   /** Admins provision staff accounts (rangers, researchers, other admins). */
   app.post("/auth/users", adminOnly, async (req, reply) => {
     const body = newAccount.extend({ role: z.enum(ROLES) }).parse(req.body);
-    const user = await createUser(sql, { ...body, role: body.role as Role });
+    const user = await sql.begin(async (tx) => {
+      const u = await createUser(tx as unknown as typeof sql, { ...body, role: body.role as Role });
+      await audit(tx as unknown as typeof sql, req.user.sub, "user.create", u.email, { role: u.role });
+      return u;
+    });
     return reply.code(201).send(user);
   });
 
@@ -77,7 +82,8 @@ export async function authRoutes(app: FastifyInstance) {
     if (id === req.user.sub && (body.disabled || (body.role && body.role !== "ADMIN"))) {
       return reply.code(409).send({ error: "You cannot demote or disable your own account" });
     }
-    const [user] = await sql<User[]>`
+    const user = await sql.begin(async (tx) => {
+      const [u] = await tx<User[]>`
       UPDATE users SET
         role = COALESCE(${body.role ?? null}, role),
         disabled_at = CASE
@@ -89,6 +95,9 @@ export async function authRoutes(app: FastifyInstance) {
       WHERE id = ${id}
       RETURNING ${USER_COLUMNS}
     `;
+      if (u) await audit(tx as unknown as typeof sql, req.user.sub, "user.update", u.email, body);
+      return u;
+    });
     if (!user) return reply.code(404).send({ error: "User not found" });
     return user;
   });

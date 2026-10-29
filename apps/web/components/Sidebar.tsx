@@ -74,7 +74,10 @@ export function Sidebar(p: Props) {
           {p.user.name}
           <span className="role">{p.user.role}</span>
         </span>
-        <button className="link" onClick={p.onSignOut}>Sign out</button>
+        <span className="link-row">
+          {p.user.role === "ADMIN" && <a className="link" href="/admin">Admin</a>}
+          <button className="link" onClick={p.onSignOut}>Sign out</button>
+        </span>
       </div>
 
       <Section title="Species" aside={

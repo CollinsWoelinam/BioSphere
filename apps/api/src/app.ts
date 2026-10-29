@@ -8,6 +8,7 @@ import { authPlugin, resolveViewer, type TokenPayload } from "./auth.js";
 import { config } from "./config.js";
 import { sql } from "./db.js";
 import { addClient } from "./live.js";
+import { adminRoutes } from "./routes/admin.js";
 import { analysisRoutes } from "./routes/analysis.js";
 import { authRoutes } from "./routes/auth.js";
 import { observationRoutes } from "./routes/observations.js";
@@ -16,7 +17,8 @@ import { photoRoutes } from "./routes/photos.js";
 export async function buildApp() {
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? "info" }, bodyLimit: 10 * 1024 * 1024 });
 
-  await app.register(cors, { origin: config.corsOrigin });
+  // The default only allows GET/HEAD/POST, which silently breaks browser PUT/PATCH/DELETE.
+  await app.register(cors, { origin: config.corsOrigin, methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"] });
   await app.register(rateLimit, { global: false });
   await app.register(websocket);
   await app.register(multipart, { limits: { files: 1, fileSize: config.maxPhotoBytes } });
@@ -56,6 +58,7 @@ export async function buildApp() {
     await secured.register(observationRoutes);
     await secured.register(analysisRoutes);
     await secured.register(photoRoutes);
+    await secured.register(adminRoutes);
   });
 
   return app;
