@@ -28,6 +28,11 @@ class LocationService {
 
   Future<Position?> lastKnown() => Geolocator.getLastKnownPosition();
 
+  /// Continuous position updates for the map's "you are here" marker.
+  Stream<Position> positionStream() => Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 5),
+      );
+
   Stream<Position> precisionFix({
     double targetAccuracyM = 5,
     Duration timeout = const Duration(seconds: 30),

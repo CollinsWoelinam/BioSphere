@@ -67,8 +67,35 @@ class _LogSightingScreenState extends State<LogSightingScreen> {
         );
   }
 
-  Future<void> _takePhoto() async {
-    final shot = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 85, maxWidth: 2400);
+  /// Camera, or the photo library for pictures taken with a separate camera.
+  Future<void> _addPhoto() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.photo_camera_outlined),
+            title: const Text('Take photo'),
+            onTap: () => Navigator.pop(c, ImageSource.camera),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('Choose from library'),
+            onTap: () => Navigator.pop(c, ImageSource.gallery),
+          ),
+        ]),
+      ),
+    );
+    if (source == null) return;
+    final XFile? shot;
+    try {
+      shot = await ImagePicker().pickImage(source: source, imageQuality: 85, maxWidth: 2400);
+    } catch (e) {
+      // e.g. no camera available on this device
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not open ${source.name}: $e')));
+      return;
+    }
     if (shot == null) return;
     final dir = Directory(p.join((await getApplicationDocumentsDirectory()).path, 'photos'));
     await dir.create(recursive: true);
@@ -204,9 +231,9 @@ class _LogSightingScreenState extends State<LogSightingScreen> {
               child: Image.file(File(_photoPath!), height: 180, fit: BoxFit.cover),
             ),
           OutlinedButton.icon(
-            onPressed: _takePhoto,
+            onPressed: _addPhoto,
             icon: const Icon(Icons.photo_camera_outlined),
-            label: Text(_photoPath == null ? 'Add photo' : 'Retake photo'),
+            label: Text(_photoPath == null ? 'Add photo' : 'Change photo'),
           ),
           const SizedBox(height: 24),
           FilledButton.icon(
