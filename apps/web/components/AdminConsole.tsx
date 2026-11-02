@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { admin, type Account, type AuditEntry, type RegistryEntry, type Role, type SessionUser } from "@/lib/api";
 import { fmtNum } from "@/lib/format";
+import { AppHeader } from "./AppHeader";
 
 const ROLES: Role[] = ["CITIZEN", "RANGER", "RESEARCHER", "ADMIN"];
 type Tab = "accounts" | "species" | "audit";
@@ -20,28 +21,27 @@ export function AdminConsole({ user, onSignOut }: { user: SessionUser; onSignOut
   }, []);
 
   return (
-    <div className="admin">
-      <header className="admin-head">
-        <div>
-          <h1>BioSphere admin</h1>
-          <p className="muted">Signed in as {user.name}</p>
-        </div>
-        <nav className="link-row">
-          <a className="link" href="/">Map</a>
-          <button className="link" onClick={onSignOut}>Sign out</button>
-        </nav>
-      </header>
-      <div className="segmented admin-tabs" role="tablist">
-        {(["accounts", "species", "audit"] as Tab[]).map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
-            {t === "accounts" ? "Accounts" : t === "species" ? "Species registry" : "Audit log"}
-          </button>
-        ))}
+    <div className="shell scroll">
+      <AppHeader user={user} view="admin" onSignOut={onSignOut} />
+      <div className="admin">
+        <header className="admin-head">
+          <div>
+            <h1>Admin console</h1>
+            <p className="muted">Accounts, sensitive species and a record of every change.</p>
+          </div>
+          <div className="segmented admin-tabs" role="tablist" aria-label="Admin sections">
+            {(["accounts", "species", "audit"] as Tab[]).map((t) => (
+              <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
+                {t === "accounts" ? "Users" : t === "species" ? "Species registry" : "Audit log"}
+              </button>
+            ))}
+          </div>
+        </header>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        {tab === "accounts" && <Accounts me={user} run={run} />}
+        {tab === "species" && <Registry run={run} />}
+        {tab === "audit" && <Audit run={run} />}
       </div>
-      {error && <p className="form-error" role="alert">{error}</p>}
-      {tab === "accounts" && <Accounts me={user} run={run} />}
-      {tab === "species" && <Registry run={run} />}
-      {tab === "audit" && <Audit run={run} />}
     </div>
   );
 }
@@ -92,18 +92,23 @@ function Accounts({ me, run }: { me: SessionUser; run: Run }) {
             const self = u.id === me.id;
             return (
               <tr key={u.id} className={u.disabled_at ? "disabled" : ""}>
-                <td>{u.name}{self && <span className="muted"> (you)</span>}</td>
+                <td><b>{u.name}</b>{self && <span className="muted"> (you)</span>}</td>
                 <td>{u.email}</td>
                 <td>
                   <select aria-label={`Role for ${u.email}`} value={u.role} disabled={self} onChange={(e) => update(u, { role: e.target.value as Role })}>
                     {ROLES.map((r) => <option key={r}>{r}</option>)}
                   </select>
                 </td>
-                <td>{u.disabled_at ? "Disabled" : "Active"}</td>
+                <td>
+                  <span className={`status-pill ${u.disabled_at ? "off" : "on"}`}>
+                    <span className="dot" aria-hidden />
+                    {u.disabled_at ? "Disabled" : "Active"}
+                  </span>
+                </td>
                 <td>{new Date(u.created_at).toLocaleDateString()}</td>
                 <td className="num">
                   {!self && (
-                    <button className="link" onClick={() => update(u, { disabled: !u.disabled_at })}>
+                    <button className={u.disabled_at ? "secondary small" : "danger small"} onClick={() => update(u, { disabled: !u.disabled_at })}>
                       {u.disabled_at ? "Enable" : "Disable"}
                     </button>
                   )}

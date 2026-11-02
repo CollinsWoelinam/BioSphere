@@ -160,8 +160,10 @@ void main() {
   Future<void> snap(WidgetTester t, String name) async {
     await t.pump(const Duration(milliseconds: 300));
     final view = t.binding.renderViews.first;
+    // The root layer already applies the device pixel ratio, so the bounds are in physical pixels.
+    final dpr = view.flutterView.devicePixelRatio;
     final layer = view.debugLayer! as OffsetLayer;
-    final image = await layer.toImage(Offset.zero & view.size, pixelRatio: 2);
+    final image = await layer.toImage(Offset.zero & (view.size * dpr), pixelRatio: 2 / dpr);
     final png = await image.toByteData(format: ui.ImageByteFormat.png);
     shots[name] = base64Encode(png!.buffer.asUint8List());
   }
@@ -239,7 +241,7 @@ void main() {
     await waitFor(() async => !state.sync.syncing && state.sync.pending >= 1, t: t, what: 'queued sighting');
     expect(await serverSighting(token, offlineNotes), isNull);
 
-    await t.tap(find.text('Sightings'));
+    await t.tap(find.text('Queue'));
     await pumpUntil(t, find.text('Sync now'));
     await t.pump(const Duration(milliseconds: 500));
     await snap(t, '04-queued-offline');
@@ -251,7 +253,7 @@ void main() {
     await t.tap(find.text('Save & test'));
     await waitFor(() async => await serverSighting(token, offlineNotes) != null, t: t, what: 'queued sighting synced');
     await waitFor(() async => state.sync.pending == 0, t: t, what: 'queue drained');
-    await t.tap(find.text('Sightings'));
+    await t.tap(find.text('Queue'));
     await t.pump(const Duration(seconds: 1));
     await snap(t, '05-synced');
 
@@ -291,6 +293,19 @@ void main() {
     await pumpUntil(t, find.text('E2E offline test map'));
     await snap(t, '07-settings');
     await state.setOfflineTiles(null);
+
+    // --- Field guide ----------------------------------------------------------
+    await t.tap(find.text('Guide'));
+    await pumpUntil(t, find.text('Black rhinoceros'));
+    await snap(t, '08-guide');
+    await t.tap(find.text('Black rhinoceros'));
+    await pumpUntil(t, find.text('Log this species'));
+    await t.pump(const Duration(milliseconds: 600));
+    await snap(t, '09-guide-detail');
+    await t.pageBack();
+    await t.pump(const Duration(milliseconds: 600));
+    await t.tap(find.text('Settings'));
+    await pumpUntil(t, find.text('Sign out'));
 
     // --- Sign out -------------------------------------------------------------
     await t.tap(find.text('Sign out'));

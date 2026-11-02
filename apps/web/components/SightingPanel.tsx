@@ -54,16 +54,21 @@ export function SightingPanel({ sighting, swatch, onClose }: { sighting: Sightin
         <button className="ghost" onClick={onClose} aria-label="Close">×</button>
       </header>
       <dl>
-        <dt>Observed</dt><dd>{new Date(s.t).toLocaleString()}</dd>
-        <dt>Count</dt><dd>{fmtNum(s.individual_count)}</dd>
-        <dt>Observer</dt><dd>{s.observer_type === "RANGER" ? "Ranger" : "Citizen scientist"}</dd>
-        <dt>Position</dt>
-        <dd>
-          {s.position[1].toFixed(s.generalized ? 1 : 5)}, {s.position[0].toFixed(s.generalized ? 1 : 5)}
-          {s.generalized ? " (generalised ~11 km)" : s.accuracy_m != null ? ` ±${fmtNum(s.accuracy_m, 1)} m` : ""}
-        </dd>
-        {s.habitat_notes && (<><dt>Notes</dt><dd>{s.habitat_notes}</dd></>)}
+        <div><dt>Count</dt><dd>{fmtNum(s.individual_count)}</dd></div>
+        <div>
+          <dt>GPS accuracy</dt>
+          <dd className="mono">{s.generalized ? "~11 km grid" : s.accuracy_m != null ? `±${fmtNum(s.accuracy_m, 1)} m` : "–"}</dd>
+        </div>
+        <div><dt>Observed</dt><dd>{new Date(s.t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</dd></div>
+        <div><dt>Observer</dt><dd>{s.observer_type === "RANGER" ? "Ranger" : "Citizen scientist"}</dd></div>
+        <div className="wide">
+          <dt>Position</dt>
+          <dd className="mono">
+            {s.position[1].toFixed(s.generalized ? 1 : 5)}, {s.position[0].toFixed(s.generalized ? 1 : 5)}
+          </dd>
+        </div>
       </dl>
+      {s.habitat_notes && <p className="notes">{s.habitat_notes}</p>}
       {!!s.photo_count && (
         <div className="photo-grid">
           {photos === null && <p className="muted small">Loading photos…</p>}

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import '../widgets/logo.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -62,9 +63,9 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Form(
                 key: _form,
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  Icon(Icons.eco, size: 48, color: scheme.primary),
-                  const SizedBox(height: 12),
-                  Text('BioSphere Field', style: t.headlineSmall, textAlign: TextAlign.center),
+                  const Center(child: BioLogo(size: 64)),
+                  const SizedBox(height: 16),
+                  Text('BioSphere Field', style: t.headlineMedium, textAlign: TextAlign.center),
                   Text(
                     _register ? 'Create a citizen scientist account' : 'Sign in to log and sync sightings',
                     style: t.bodyMedium?.copyWith(color: scheme.outline),
@@ -74,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   if (_register) ...[
                     TextFormField(
                       controller: _name,
-                      decoration: const InputDecoration(labelText: 'Name', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(labelText: 'Name'),
                       validator: (v) => (v ?? '').trim().isEmpty ? 'Enter your name' : null,
                     ),
                     const SizedBox(height: 12),
@@ -83,7 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.email],
-                    decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(labelText: 'Email'),
                     validator: (v) => (v ?? '').contains('@') ? null : 'Enter a valid email',
                   ),
                   const SizedBox(height: 12),
@@ -91,7 +92,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _password,
                     obscureText: true,
                     autofillHints: const [AutofillHints.password],
-                    decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(labelText: 'Password'),
                     validator: (v) =>
                         _register && (v ?? '').length < 10 ? 'At least 10 characters' : ((v ?? '').isEmpty ? 'Enter your password' : null),
                     onFieldSubmitted: (_) => _submit(),
@@ -103,7 +104,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 20),
                   FilledButton(
                     onPressed: _busy ? null : _submit,
-                    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
                     child: Text(_busy ? 'Please wait…' : (_register ? 'Create account' : 'Sign in')),
                   ),
                   TextButton(
@@ -118,7 +119,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextField(
                         controller: _server,
                         keyboardType: TextInputType.url,
-                        decoration: const InputDecoration(labelText: 'BioSphere API URL', border: OutlineInputBorder()),
+                        decoration: const InputDecoration(labelText: 'BioSphere API URL'),
                         onChanged: (_) => setState(() {}),
                       ),
                       const SizedBox(height: 8),

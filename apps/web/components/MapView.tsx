@@ -14,7 +14,7 @@ import { DIVERGING, SEQUENTIAL_BLUE, rgba, speciesColor, type Mode } from "@/lib
 import { compass, fmtDate, fmtMonth, fmtNum } from "@/lib/format";
 import type { DensityFC, LayerToggles } from "./Workspace";
 
-export type Basemap = "topo" | "streets" | "satellite";
+export type Basemap = "dark" | "topo" | "streets" | "satellite";
 
 setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
 
@@ -26,6 +26,8 @@ const raster = (tiles: string[], attribution: string, maxzoom = 19, saturation =
 });
 
 const BASEMAPS: Record<Basemap, string | StyleSpecification> = {
+  // Dark vector basemap: the default, so hulls, density and tracks read clearly.
+  dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
   topo: raster(
     ["a", "b", "c"].map((s) => `https://${s}.tile.opentopomap.org/{z}/{x}/{y}.png`),
     "© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)",
@@ -83,11 +85,18 @@ interface Segment extends TrajectoryStep {
 export function MapView(p: Props) {
   const [viewState, setViewState] = useState<MapViewState>({ longitude: 34.8, latitude: -2.2, zoom: 7.5 });
   const [fitted, setFitted] = useState(false);
+  const frame = useRef<HTMLDivElement>(null);
+  /** The map's on-screen size, floored so fitBounds padding never exceeds it. */
+  const viewport = () =>
+    new WebMercatorViewport({
+      width: Math.max(frame.current?.clientWidth ?? window.innerWidth, 240),
+      height: Math.max(frame.current?.clientHeight ?? window.innerHeight, 240),
+    });
 
   // Fit to the data the first time species extents arrive.
   useEffect(() => {
     if (!p.bounds || fitted) return;
-    const vp = new WebMercatorViewport({ width: window.innerWidth - 360, height: window.innerHeight - 160 });
+    const vp = viewport();
     const { longitude, latitude, zoom } = vp.fitBounds(
       [
         [p.bounds[0], p.bounds[1]],
@@ -109,7 +118,7 @@ export function MapView(p: Props) {
     if (!fixes.length) return;
     const lons = fixes.map((f) => f.lon);
     const lats = fixes.map((f) => f.lat);
-    const vp = new WebMercatorViewport({ width: window.innerWidth - 360, height: window.innerHeight - 200 });
+    const vp = viewport();
     const { longitude, latitude, zoom } = vp.fitBounds(
       [
         [Math.min(...lons), Math.min(...lats)],
@@ -392,16 +401,18 @@ export function MapView(p: Props) {
   ].filter(Boolean);
 
   return (
-    <DeckGL
-      viewState={viewState}
-      onViewStateChange={({ viewState: vs }) => setViewState(vs as MapViewState)}
-      controller
-      layers={deckLayers}
-      getTooltip={tooltip}
-      getCursor={({ isHovering, isDragging }) => (isDragging ? "grabbing" : isHovering ? "pointer" : "grab")}
-    >
-      <Map mapStyle={BASEMAPS[p.basemap]} attributionControl={{ compact: true }} />
-    </DeckGL>
+    <div ref={frame} className="map-canvas">
+      <DeckGL
+        viewState={viewState}
+        onViewStateChange={({ viewState: vs }) => setViewState(vs as MapViewState)}
+        controller
+        layers={deckLayers}
+        getTooltip={tooltip}
+        getCursor={({ isHovering, isDragging }) => (isDragging ? "grabbing" : isHovering ? "pointer" : "grab")}
+      >
+        <Map mapStyle={BASEMAPS[p.basemap]} attributionControl={{ compact: true }} />
+      </DeckGL>
+    </div>
   );
 }
 

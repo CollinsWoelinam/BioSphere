@@ -9,7 +9,10 @@ import 'package:latlong2/latlong.dart';
 
 import '../app_state.dart';
 import '../models/field_sighting.dart';
+import '../theme.dart';
+import '../widgets/map_pill.dart';
 import '../widgets/sync_chip.dart';
+import '../widgets/tag.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -27,10 +30,12 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
-    _startTracking();
+    // AppScope is an inherited widget, which can't be read until initState has returned.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startTracking());
   }
 
   Future<void> _startTracking() async {
+    if (!mounted) return;
     try {
       await AppScope.of(context).location.ensurePermission();
     } catch (_) {
@@ -53,8 +58,10 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final scheme = Theme.of(context).colorScheme;
+    final bio = BioColors.of(context);
     final offline = app.offlineTiles;
     final here = _position == null ? null : LatLng(_position!.latitude, _position!.longitude);
+    const blue = Color(0xFF2F6FD6);
 
     return Scaffold(
       body: Stack(children: [
@@ -64,6 +71,7 @@ class _MapScreenState extends State<MapScreen> {
             initialCenter: here ?? offline?.bounds?.center ?? const LatLng(-2.33, 34.83),
             initialZoom: 9,
             maxZoom: 19,
+            backgroundColor: const Color(0xFFE6ECDF),
             onPositionChanged: (_, hasGesture) {
               if (hasGesture && _follow) setState(() => _follow = false);
             },
@@ -85,8 +93,8 @@ class _MapScreenState extends State<MapScreen> {
                   point: here!,
                   radius: _position!.accuracy,
                   useRadiusInMeter: true,
-                  color: scheme.primary.withValues(alpha: 0.12),
-                  borderColor: scheme.primary.withValues(alpha: 0.5),
+                  color: blue.withValues(alpha: 0.14),
+                  borderColor: blue.withValues(alpha: 0.4),
                   borderStrokeWidth: 1,
                 ),
               ]),
@@ -95,55 +103,91 @@ class _MapScreenState extends State<MapScreen> {
               if (here != null)
                 Marker(
                   point: here,
-                  width: 22,
-                  height: 22,
+                  width: 24,
+                  height: 24,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: scheme.primary,
+                      color: blue,
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.white, width: 3),
-                      boxShadow: const [BoxShadow(blurRadius: 4, color: Colors.black26)],
+                      boxShadow: const [BoxShadow(blurRadius: 6, color: Colors.black26)],
                     ),
                   ),
                 ),
             ]),
-            RichAttributionWidget(attributions: [
-              TextSourceAttribution(offline != null ? 'Offline map: ${offline.name}' : '© OpenStreetMap contributors'),
-            ]),
+            RichAttributionWidget(
+              alignment: AttributionAlignment.bottomLeft,
+              attributions: [
+                TextSourceAttribution(offline != null ? 'Offline map: ${offline.name}' : '© OpenStreetMap contributors'),
+              ],
+            ),
           ],
         ),
         SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Row(children: [
-                SyncChip(sync: app.sync),
-                const Spacer(),
-                _MapSourceChip(offline: offline != null),
-              ]),
-              const SizedBox(height: 12),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  MapPill(
+                    icon: offline != null ? Icons.map_outlined : Icons.public,
+                    label: offline != null ? 'Offline map' : 'Online map',
+                  ),
+                  if (offline != null)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 14, top: 4),
+                      child: Text(offline.name,
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: scheme.onSurface, shadows: const [
+                            Shadow(color: Colors.white, blurRadius: 4),
+                          ])),
+                    ),
+                  const SizedBox(height: 8),
+                  SyncChip(sync: app.sync),
+                ]),
+              ),
               // Top-right, so it never sits under the "Log sighting" button or snack bars.
-              FloatingActionButton.small(
-                heroTag: 'locate',
-                tooltip: 'Follow my location',
-                onPressed: here == null
-                    ? null
-                    : () {
-                        setState(() => _follow = true);
-                        _map.move(here, 15);
-                      },
-                child: Icon(_follow ? Icons.my_location : Icons.location_searching),
+              Material(
+                color: scheme.surface,
+                elevation: 3,
+                shadowColor: Colors.black38,
+                borderRadius: BorderRadius.circular(14),
+                child: IconButton(
+                  tooltip: 'Follow my location',
+                  constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+                  onPressed: here == null
+                      ? null
+                      : () {
+                          setState(() => _follow = true);
+                          _map.move(here, 15);
+                        },
+                  icon: Icon(_follow ? Icons.my_location : Icons.location_searching, color: blue),
+                ),
               ),
             ]),
           ),
         ),
+        if (_position != null)
+          Positioned(
+            left: 16,
+            bottom: 64, // above the attribution buttons
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: bio.instrument, borderRadius: BorderRadius.circular(10)),
+              child: Text(
+                '±${_position!.accuracy.toStringAsFixed(0)} m · '
+                '${_position!.latitude.toStringAsFixed(4)}, ${_position!.longitude.toStringAsFixed(4)}',
+                style: const TextStyle(fontFamily: monoFont, fontSize: 12, color: Colors.white),
+              ),
+            ),
+          ),
       ]),
     );
   }
 
   Marker _sightingMarker(BuildContext context, FieldSighting s) {
     final scheme = Theme.of(context).colorScheme;
-    final color = s.isInvasive ? const Color(0xFF5B3A8C) : scheme.primary;
+    final bio = BioColors.of(context);
+    final color = s.isInvasive ? bio.warn : scheme.primary;
     return Marker(
       point: LatLng(s.latitude, s.longitude),
       width: 30,
@@ -151,14 +195,17 @@ class _MapScreenState extends State<MapScreen> {
       child: GestureDetector(
         onTap: () => _showSighting(context, s),
         child: Stack(alignment: Alignment.center, children: [
-          Icon(s.isInvasive ? Icons.grass : Icons.pets, color: color, size: 22,
-              shadows: const [Shadow(blurRadius: 3, color: Colors.white)]),
-          if (!s.isSynced)
-            Positioned(
-              right: 0,
-              top: 0,
-              child: Icon(Icons.cloud_upload, size: 12, color: scheme.tertiary),
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              color: s.isSynced ? color : scheme.surface,
+              shape: BoxShape.circle,
+              border: Border.all(color: s.isSynced ? Colors.white : color, width: 3),
+              boxShadow: const [BoxShadow(blurRadius: 4, color: Colors.black26)],
             ),
+            child: Icon(s.isInvasive ? Icons.grass : Icons.pets, size: 13, color: s.isSynced ? Colors.white : color),
+          ),
         ]),
       ),
     );
@@ -166,47 +213,42 @@ class _MapScreenState extends State<MapScreen> {
 
   void _showSighting(BuildContext context, FieldSighting s) {
     final fmt = DateFormat.yMMMd().add_Hm();
+    final bio = BioColors.of(context);
+    final common = AppScope.of(context).guide.byScientificName(s.speciesName)?.commonName;
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
-      builder: (_) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(s.speciesName, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontStyle: FontStyle.italic)),
-          const SizedBox(height: 8),
-          Text('${fmt.format(s.timestamp.toLocal())} · ${s.individualCount} individual(s)'),
-          Text('${s.latitude.toStringAsFixed(6)}, ${s.longitude.toStringAsFixed(6)}'
-              '${s.accuracyM != null ? '  ±${s.accuracyM!.toStringAsFixed(1)} m' : ''}'),
-          if (s.habitatNotes?.isNotEmpty ?? false) Padding(padding: const EdgeInsets.only(top: 8), child: Text(s.habitatNotes!)),
-          const SizedBox(height: 8),
-          Chip(
-            avatar: Icon(s.isSynced ? Icons.cloud_done : Icons.cloud_upload_outlined, size: 18),
-            label: Text(s.isSynced ? 'Synced' : 'Waiting to sync'),
-          ),
-        ]),
-      ),
-    );
-  }
-}
-
-class _MapSourceChip extends StatelessWidget {
-  const _MapSourceChip({required this.offline});
-  final bool offline;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: scheme.surface,
-      elevation: 2,
-      borderRadius: BorderRadius.circular(20),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(offline ? Icons.offline_pin : Icons.public, size: 18, color: scheme.primary),
-          const SizedBox(width: 6),
-          Text(offline ? 'Offline map' : 'Online map', style: Theme.of(context).textTheme.labelLarge),
-        ]),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(common ?? s.speciesName, style: Theme.of(context).textTheme.titleLarge),
+            if (common != null) Text(s.speciesName, style: TextStyle(fontStyle: FontStyle.italic, color: bio.muted)),
+            const SizedBox(height: 14),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              Tag(s.isSynced ? 'UPLOADED' : 'WAITING TO SYNC',
+                  background: s.isSynced ? bio.goodSoft : bio.warnSoft, foreground: s.isSynced ? bio.good : bio.warnInk),
+              if (s.isInvasive) Tag('INVASIVE', background: bio.dangerSoft, foreground: bio.dangerInk),
+            ]),
+            const SizedBox(height: 14),
+            Text('${fmt.format(s.timestamp.toLocal())} · ${s.individualCount} individual${s.individualCount == 1 ? '' : 's'}',
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            Text(
+              '${s.latitude.toStringAsFixed(5)}, ${s.longitude.toStringAsFixed(5)}'
+              '${s.accuracyM != null ? ' · ±${s.accuracyM!.toStringAsFixed(1)} m' : ''}',
+              style: TextStyle(fontFamily: monoFont, fontSize: 13, color: bio.muted),
+            ),
+            if (s.habitatNotes?.isNotEmpty ?? false)
+              Container(
+                margin: const EdgeInsets.only(top: 14),
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: bio.page, borderRadius: BorderRadius.circular(12)),
+                child: Text(s.habitatNotes!),
+              ),
+          ]),
+        ),
       ),
     );
   }
