@@ -10,7 +10,6 @@ import 'package:latlong2/latlong.dart';
 import '../app_state.dart';
 import '../models/field_sighting.dart';
 import '../widgets/sync_chip.dart';
-import 'log_sighting_screen.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -37,9 +36,8 @@ class _MapScreenState extends State<MapScreen> {
     } catch (_) {
       return; // Map still works without location; logging will ask again.
     }
-    _posSub = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 5),
-    ).listen((p) {
+    if (!mounted) return;
+    _posSub = AppScope.of(context).location.positionStream().listen((p) {
       setState(() => _position = p);
       if (_follow) _map.move(LatLng(p.latitude, p.longitude), _map.camera.zoom);
     }, onError: (_) {});
@@ -117,32 +115,27 @@ class _MapScreenState extends State<MapScreen> {
         SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(12),
-            child: Row(children: [
-              SyncChip(sync: app.sync),
-              const Spacer(),
-              _MapSourceChip(offline: offline != null),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Row(children: [
+                SyncChip(sync: app.sync),
+                const Spacer(),
+                _MapSourceChip(offline: offline != null),
+              ]),
+              const SizedBox(height: 12),
+              // Top-right, so it never sits under the "Log sighting" button or snack bars.
+              FloatingActionButton.small(
+                heroTag: 'locate',
+                tooltip: 'Follow my location',
+                onPressed: here == null
+                    ? null
+                    : () {
+                        setState(() => _follow = true);
+                        _map.move(here, 15);
+                      },
+                child: Icon(_follow ? Icons.my_location : Icons.location_searching),
+              ),
             ]),
           ),
-        ),
-      ]),
-      floatingActionButton: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
-        FloatingActionButton.small(
-          heroTag: 'locate',
-          tooltip: 'Follow my location',
-          onPressed: here == null
-              ? null
-              : () {
-                  setState(() => _follow = true);
-                  _map.move(here, 15);
-                },
-          child: Icon(_follow ? Icons.my_location : Icons.location_searching),
-        ),
-        const SizedBox(height: 12),
-        FloatingActionButton.extended(
-          heroTag: 'log',
-          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LogSightingScreen())),
-          icon: const Icon(Icons.add_location_alt),
-          label: const Text('Log sighting'),
         ),
       ]),
     );

@@ -54,6 +54,23 @@ pnpm --filter @biosphere/api test   # integration tests against the dev database
 cd apps/mobile && flutter test      # model + offline-sync unit tests
 ```
 
+End-to-end field-app test on an iOS simulator. The API must be running on :4000 with the seeded `ranger@biosphere.local` account. The test signs in, logs a sighting, queues one against an unreachable API and syncs it, uploads a photo, loads a generated MBTiles basemap and signs out. Each step's result is checked against the API, and screenshots are saved to `SCREENSHOT_DIR`.
+
+```bash
+cd apps/mobile
+SCREENSHOT_DIR=build/e2e_screenshots flutter drive \
+  --driver test_driver/integration_test.dart \
+  --target integration_test/field_flow_test.dart -d <simulator-id>
+```
+
+CI (`.github/workflows/ci.yml`) runs on every pull request and every push to `main`:
+
+- **API:** typecheck, migrations and tests, against a PostGIS 17 service container.
+- **Web:** typecheck and production build.
+- **Field app:** `flutter analyze` and the unit tests.
+
+The simulator test is not part of CI.
+
 ## Tool choices (and where they differ from the original spec)
 
 | Spec | Chosen | Why |

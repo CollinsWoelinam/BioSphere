@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API (tests against PostGIS)
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgis/postgis:17-3.5-alpine
+        env:
+          POSTGRES_USER: biosphere
+          POSTGRES_PASSWORD: biosphere
+          POSTGRES_DB: biosphere
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U biosphere -d biosphere"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgres://biosphere:biosphere@localhost:5432/biosphere
+      PHOTO_STORAGE: local
+      LOG_LEVEL: warn
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @biosphere/api typecheck
+      - run: pnpm --filter @biosphere/api migrate
+      - run: pnpm --filter @biosphere/api test
+
+  web:
+    name: Web (typecheck + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @biosphere/web typecheck
+      - run: pnpm --filter @biosphere/web build
+
+  mobile:
+    name: Mobile (analyze + unit tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.41.4
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      # sqflite_common_ffi needs the system SQLite library on Linux runners.
+      - run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+      - run: flutter test

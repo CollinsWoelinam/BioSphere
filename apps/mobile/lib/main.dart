@@ -6,6 +6,7 @@ import 'app_state.dart';
 import 'data/sighting_store.dart';
 import 'data/species_guide.dart';
 import 'screens/guide_screen.dart';
+import 'screens/log_sighting_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/map_screen.dart';
 import 'screens/queue_screen.dart';
@@ -15,7 +16,11 @@ import 'services/location_service.dart';
 import 'services/settings.dart';
 import 'services/sync_service.dart';
 
-Future<void> main() async {
+Future<void> main() => runBioSphere();
+
+/// App entry point. [location] can be replaced in end-to-end tests, where the
+/// simulator's OS permission dialog cannot be answered programmatically.
+Future<void> runBioSphere({LocationService? location}) async {
   WidgetsFlutterBinding.ensureInitialized();
   final settings = await Settings.load();
   final store = await SightingStore.open();
@@ -27,7 +32,7 @@ Future<void> main() async {
     auth: auth,
     sync: SyncService(store, settings, auth),
     guide: await SpeciesGuide.load(),
-    location: LocationService(),
+    location: location ?? LocationService(),
   );
   await state.init();
   unawaited(state.sync.start());
@@ -86,6 +91,16 @@ class _HomeShellState extends State<HomeShell> {
           index: _tab,
           children: const [MapScreen(), QueueScreen(), GuideScreen(), SettingsScreen()],
         ),
+        // Lives on the shell's Scaffold (not the map's) so it moves up above the
+        // "Sighting saved" snack bar instead of being covered by it.
+        floatingActionButton: _tab == 0
+            ? FloatingActionButton.extended(
+                heroTag: 'log',
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LogSightingScreen())),
+                icon: const Icon(Icons.add_location_alt),
+                label: const Text('Log sighting'),
+              )
+            : null,
         bottomNavigationBar: NavigationBar(
           selectedIndex: _tab,
           onDestinationSelected: (i) => setState(() => _tab = i),
