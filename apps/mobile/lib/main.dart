@@ -15,6 +15,7 @@ import 'services/auth_service.dart';
 import 'services/location_service.dart';
 import 'services/settings.dart';
 import 'services/sync_service.dart';
+import 'theme.dart';
 
 Future<void> main() => runBioSphere();
 
@@ -44,14 +45,10 @@ class BioSphereFieldApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    ThemeData theme(Brightness b) => ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2E6B3A), brightness: b),
-          useMaterial3: true,
-        );
     return MaterialApp(
       title: 'BioSphere Field',
-      theme: theme(Brightness.light),
-      darkTheme: theme(Brightness.dark),
+      theme: bioTheme(Brightness.light),
+      darkTheme: bioTheme(Brightness.dark),
       home: const _AuthGate(),
     );
   }
@@ -97,7 +94,7 @@ class _HomeShellState extends State<HomeShell> {
             ? FloatingActionButton.extended(
                 heroTag: 'log',
                 onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LogSightingScreen())),
-                icon: const Icon(Icons.add_location_alt),
+                icon: const Icon(Icons.add_location_alt_outlined),
                 label: const Text('Log sighting'),
               )
             : null,
@@ -109,11 +106,17 @@ class _HomeShellState extends State<HomeShell> {
             NavigationDestination(
               icon: Badge(
                 isLabelVisible: app.sync.pending > 0,
+                backgroundColor: BioColors.of(context).warn,
                 label: Text('${app.sync.pending}'),
-                child: const Icon(Icons.list_alt_outlined),
+                child: const Icon(Icons.cloud_upload_outlined),
               ),
-              selectedIcon: const Icon(Icons.list_alt),
-              label: 'Sightings',
+              selectedIcon: Badge(
+                isLabelVisible: app.sync.pending > 0,
+                backgroundColor: BioColors.of(context).warn,
+                label: Text('${app.sync.pending}'),
+                child: const Icon(Icons.cloud_upload),
+              ),
+              label: 'Queue',
             ),
             const NavigationDestination(icon: Icon(Icons.menu_book_outlined), selectedIcon: Icon(Icons.menu_book), label: 'Guide'),
             const NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Settings'),

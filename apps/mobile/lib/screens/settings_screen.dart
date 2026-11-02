@@ -99,7 +99,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         TextField(
           controller: _api,
           keyboardType: TextInputType.url,
-          decoration: const InputDecoration(labelText: 'BioSphere API URL', border: OutlineInputBorder()),
+          decoration: const InputDecoration(labelText: 'BioSphere API URL'),
           onSubmitted: (_) => _testConnection(),
         ),
         const SizedBox(height: 8),

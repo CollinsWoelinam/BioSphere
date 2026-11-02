@@ -10,7 +10,6 @@ import type { CompareRequest, HullOptions, LayerToggles } from "./Workspace";
 
 interface Props {
   user: SessionUser;
-  onSignOut: () => void;
   /** Selected species this viewer may analyse (excludes sensitive ones for citizens). */
   analysable: string[];
   mode: Mode;
@@ -37,9 +36,6 @@ interface Props {
   cellKm: number;
   onCellKmChange: (n: number) => void;
   domain: [number, number];
-  liveConnected: boolean;
-  /** Staff-only collar panel, rendered after the map layers. */
-  collarPanel?: React.ReactNode;
 }
 
 const LAYER_LABELS: [keyof LayerToggles, string, string][] = [
@@ -51,6 +47,8 @@ const LAYER_LABELS: [keyof LayerToggles, string, string][] = [
   ["frontier", "Invasive frontier", "Monthly spread of invasive species"],
 ];
 
+const BASEMAP_LABELS: Record<Basemap, string> = { dark: "Dark", topo: "Terrain", streets: "Streets", satellite: "Satellite" };
+
 const isoDay = (t: number) => new Date(t).toISOString().slice(0, 10);
 
 export function Sidebar(p: Props) {
@@ -59,28 +57,7 @@ export function Sidebar(p: Props) {
     p.onSelectedChange(p.selected.includes(name) ? p.selected.filter((s) => s !== name) : [...p.selected, name]);
 
   return (
-    <aside className="sidebar">
-      <header className="brand">
-        <div>
-          <h1>BioSphere</h1>
-          <p className="muted">Research &amp; Analytics Portal</p>
-        </div>
-        <span className={`live ${p.liveConnected ? "on" : "off"}`} title={p.liveConnected ? "Receiving field sightings live" : "Live feed disconnected"}>
-          <span className="dot" aria-hidden />
-          {p.liveConnected ? "Live" : "Offline"}
-        </span>
-      </header>
-
-      <div className="account">
-        <span>
-          {p.user.name}
-          <span className="role">{p.user.role}</span>
-        </span>
-        <span className="link-row">
-          {p.user.role === "ADMIN" && <a className="link" href="/admin">Admin</a>}
-          <button className="link" onClick={p.onSignOut}>Sign out</button>
-        </span>
-      </div>
+    <aside className="sidebar" aria-label="Filters and analysis">
 
       <Section title="Species" aside={
         <span className="link-row">
@@ -114,9 +91,9 @@ export function Sidebar(p: Props) {
 
       <Section title="Map layers">
         <div className="segmented" role="radiogroup" aria-label="Basemap">
-          {(["topo", "streets", "satellite"] as Basemap[]).map((b) => (
+          {(["dark", "topo", "streets", "satellite"] as Basemap[]).map((b) => (
             <button key={b} role="radio" aria-checked={p.basemap === b} className={p.basemap === b ? "on" : ""} onClick={() => p.onBasemapChange(b)}>
-              {b === "topo" ? "Topographic" : b === "streets" ? "Streets" : "Satellite"}
+              {BASEMAP_LABELS[b]}
             </button>
           ))}
         </div>
@@ -135,14 +112,12 @@ export function Sidebar(p: Props) {
         </ul>
         {p.layers.hex && (
           <label className="field">
-            Hex cell size <b>{p.cellKm} km</b>
+            <span className="field-row">Hex cell size <b>{p.cellKm} km</b></span>
             <input type="range" min={1} max={15} step={1} value={p.cellKm} onChange={(e) => p.onCellKmChange(Number(e.target.value))} />
           </label>
         )}
         {(p.layers.heatmap || p.layers.hex) && <SequentialLegend />}
       </Section>
-
-      {p.collarPanel}
 
       <Section title="Home range hull">
         <div className="segmented" role="radiogroup" aria-label="Hull method">
@@ -154,13 +129,13 @@ export function Sidebar(p: Props) {
         </div>
         {p.hullOptions.method === "concave" && (
           <label className="field">
-            Tightness <b>{p.hullOptions.pct.toFixed(2)}</b>
+            <span className="field-row">Tightness <b>{p.hullOptions.pct.toFixed(2)}</b></span>
             <input type="range" min={0.1} max={1} step={0.05} value={p.hullOptions.pct} onChange={(e) => p.onHullOptionsChange({ ...p.hullOptions, pct: Number(e.target.value) })} />
             <small className="muted">ST_ConcaveHull target: 1 = convex, lower hugs clusters</small>
           </label>
         )}
         <label className="field">
-          Core range <b>{p.hullOptions.core}%</b>
+          <span className="field-row">Core range <b>{p.hullOptions.core}%</b></span>
           <input type="range" min={50} max={100} step={5} value={p.hullOptions.core} onChange={(e) => p.onHullOptionsChange({ ...p.hullOptions, core: Number(e.target.value) })} />
           <small className="muted">Drops the farthest outliers from the centroid (95% = MCP95)</small>
         </label>

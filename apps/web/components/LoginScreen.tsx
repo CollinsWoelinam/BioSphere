@@ -29,8 +29,17 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (s: Session) => void }
   return (
     <main className="login">
       <form className="login-card" onSubmit={submit}>
-        <h1>BioSphere</h1>
-        <p className="muted">Research &amp; Analytics Portal</p>
+        <div className="login-brand">
+          <svg width="40" height="40" viewBox="0 0 32 32" aria-hidden>
+            <circle cx="16" cy="16" r="15" fill="var(--accent)" />
+            <path d="M6 19c4-1 6-6 10-6s6 5 10 6" fill="none" stroke="#b8e3c9" strokeWidth="2.2" strokeLinecap="round" />
+            <path d="M9 23c3-.6 5-3 7-3s4 2.4 7 3" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
+          </svg>
+          <div>
+            <h1>BioSphere</h1>
+            <p className="muted">Research &amp; analytics portal</p>
+          </div>
+        </div>
 
         {mode === "register" && (
           <label className="field">

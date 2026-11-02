@@ -245,8 +245,15 @@ export interface IndividualRange {
 export const telemetry = {
   individuals: () => request<Individual[]>("/individuals"),
   track: (id: string) => request<Track>(`/individuals/${id}/track`),
-  homeRange: (id: string, method: RangeMethod) =>
-    request<IndividualRange>(`/individuals/${id}/home-range?method=${method}&core=95`),
+  homeRange: (id: string, method: RangeMethod, hScale = 1) =>
+    request<IndividualRange>(`/individuals/${id}/home-range?method=${method}&core=95&h_scale=${hScale}`),
+  /** Movebank-style CSV; fixes already stored for the same timestamp are skipped. */
+  importFixes: (id: string, csv: string) =>
+    request<{ inserted: number; duplicates: number; rejected: number }>(`/individuals/${id}/fixes`, {
+      method: "POST",
+      body: csv,
+      headers: { "content-type": "text/csv" },
+    }),
 };
 
 export const api = {

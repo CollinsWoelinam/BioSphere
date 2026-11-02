@@ -114,7 +114,7 @@ pnpm --filter @biosphere/api user:create -- --email ana@park.org --name "Ana M."
 
 ### Admin console
 
-Admins have an **Admin** link in the portal sidebar, which opens `/admin`. It has three tabs:
+Admins have an **Admin** item in the portal's top bar, which opens `/admin`. It has three tabs:
 - **Accounts:** create staff accounts, change roles, and disable or re-enable users. Role changes and disabling sign the user out everywhere.
 - **Species registry:** toggle invasive and sensitive. You can also mark a species sensitive *before* its first sighting is recorded. Turning protection off asks for confirmation. Changing the invasive flag also updates that species' existing sightings.
 - **Audit log:** every account and registry change, with who made it and the before/after values.
@@ -173,9 +173,11 @@ Individually identified animals live in `individuals`, and their collar fixes in
   - On the seed data, E-023's KDE 50% core is two patches (338 km²), where MCP draws one 666 km² band across the corridor. For single-area E-017, the two methods agree (159 vs 155 km² at 95%).
   - KDE assumes independent fixes. Regular collar fixes are autocorrelated, which mostly affects bandwidth selection rather than the isopleth shape.
 
-In the portal, staff see a **Collared animals** sidebar section:
-- Ticking an animal flies the map to its track and shows its movement stats.
-- Trails follow the time cursor and window, so playback animates them alongside sightings.
+In the portal, staff get a **Collared animals** view in the top bar:
+- Selecting an animal flies the map to its full track and shows its range, core area, fix count, removed outliers and daily distance above the map.
+- Researchers and admins can import a Movebank CSV for the selected animal. Overlapping downloads are safe to re-import.
+- A bandwidth slider scales the KDE bandwidth (× h<sub>ref</sub>), and the map redraws the range as it changes.
+- Selected tracks stay on the Map view too. There they follow the time window, so playback animates them alongside sightings.
 - Each animal's code is labelled at its latest position, because two animals can share a species colour.
 - You can show each animal's 95% home range with its shaded 50% core, as KDE (default) or MCP, and show the rejected GPS fixes as rings.
 
@@ -227,7 +229,7 @@ All list endpoints accept these filters: `species` (comma-separated), `from` and
 - **Dynamic habitat hull generator.** Choose concave (α-shape, adjustable tightness) or MCP, and a core %. Run it on the current time window or all time. The results table shows area and the percentage of MCP area, which makes the convex-hull over-estimate visible.
 - **Habitat change.** Compares the hulls for two date ranges: gained areas in blue, lost in red, stable in gray.
 - **Invasive density.** Choose the GPU KDE heatmap, server hex density, or monthly frontier rings for invasive species.
-- **Basemaps.** Topographic (OpenTopoMap, desaturated so the data stands out), streets (OpenFreeMap), or satellite (Esri World Imagery).
+- **Basemaps.** Dark (CARTO Dark Matter, the default, so ranges and density stand out), terrain (OpenTopoMap, desaturated), streets (OpenFreeMap), or satellite (Esri World Imagery). Data colours switch to the dark palette on dark and satellite maps.
 - **Colors.** Species get categorical colors in a fixed order, so a species keeps its color when filters change. Invasive species also carry an ink ring, so the distinction never relies on hue alone. Light and dark modes follow the OS.
 
 ## Field app

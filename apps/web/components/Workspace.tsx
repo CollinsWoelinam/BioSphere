@@ -16,10 +16,11 @@ import {
   type Trajectory,
 } from "@/lib/api";
 import { useColorMode } from "@/lib/useColorMode";
-import { speciesColorHex } from "@/lib/colors";
+import { speciesColorHex, type Mode } from "@/lib/colors";
+import { AppHeader } from "./AppHeader";
 import { MapView, type Basemap } from "./MapView";
 import { useCollars } from "@/lib/useCollars";
-import { CollarPanel } from "./CollarPanel";
+import { CollarSidebar, CollarSummary } from "./CollarPanel";
 import { SightingPanel } from "./SightingPanel";
 import { Sidebar } from "./Sidebar";
 import { TimeBar } from "./TimeBar";
@@ -54,8 +55,20 @@ export type DensityFC = FeatureCollection<Polygon, { sightings: number; individu
   max_sightings: number;
 };
 
+const NO_LAYERS: LayerToggles = { points: false, heatmap: false, hex: false, trajectory: false, hull: false, frontier: false };
+
+type WorkspaceView = "map" | "collars";
+
+const initialView = (user: SessionUser): WorkspaceView =>
+  user.role !== "CITIZEN" && new URLSearchParams(window.location.search).get("view") === "collars" ? "collars" : "map";
+
 export function Workspace({ user, onSignOut }: { user: SessionUser; onSignOut: () => void }) {
-  const mode = useColorMode();
+  const osMode = useColorMode();
+  const [view, setView] = useState<WorkspaceView>(() => initialView(user));
+  const navigate = (v: WorkspaceView) => {
+    setView(v);
+    window.history.replaceState(null, "", v === "collars" ? "/?view=collars" : "/");
+  };
   const [species, setSpecies] = useState<Species[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [sightings, setSightings] = useState<Sighting[]>([]);
@@ -76,7 +89,9 @@ export function Workspace({ user, onSignOut }: { user: SessionUser; onSignOut: (
     hull: true,
     frontier: false,
   });
-  const [basemap, setBasemap] = useState<Basemap>("topo");
+  const [basemap, setBasemap] = useState<Basemap>("dark");
+  // Data colours follow the basemap: the dark palette steps on dark and satellite maps.
+  const mode: Mode = basemap === "dark" || basemap === "satellite" ? "dark" : osMode;
 
   // --- analysis results -----------------------------------------------------
   const [hullOptions, setHullOptions] = useState<HullOptions>({ method: "concave", pct: 0.7, core: 100, scope: "window" });
@@ -313,95 +328,104 @@ export function Workspace({ user, onSignOut }: { user: SessionUser; onSignOut: (
     ] as [number, number, number, number];
   }, [species, selected]);
 
+  const swatch = (species: string) => speciesColorHex(colorIndex.get(species) ?? 99, mode);
+  const collarsView = view === "collars";
+
   return (
-    <div className="workspace">
-      <Sidebar
-        user={user}
-        onSignOut={onSignOut}
-        analysable={analysable}
-        mode={mode}
-        species={species}
-        selected={selected}
-        onSelectedChange={setSelected}
-        colorIndex={colorIndex}
-        layers={layers}
-        onLayersChange={setLayers}
-        basemap={basemap}
-        onBasemapChange={setBasemap}
-        hullOptions={hullOptions}
-        onHullOptionsChange={setHullOptions}
-        onComputeHulls={computeHulls}
-        hulls={hulls}
-        hullBusy={hullBusy}
-        onCompare={runCompare}
-        comparison={comparison}
-        compareBusy={compareBusy}
-        onClearComparison={() => setComparison(null)}
-        trajectories={trajectories}
-        frontier={frontier}
-        invasiveSelected={invasiveSelected}
-        cellKm={cellKm}
-        onCellKmChange={setCellKm}
-        domain={domain}
-        liveConnected={liveConnected}
-        collarPanel={<CollarPanel collars={collars} swatch={(s) => speciesColorHex(colorIndex.get(s) ?? 99, mode)} />}
-      />
-      <main className="map-pane">
-        <MapView
-          mode={mode}
-          basemap={basemap}
-          bounds={bounds}
-          layers={layers}
-          visible={visible}
-          windowStart={windowStart}
-          cursor={cursor}
-          colorIndex={colorIndex}
-          hulls={hulls}
-          comparison={comparison}
-          trajectories={trajectories}
-          frontier={frontier}
-          density={density}
-          liveIds={liveIds}
-          selectedId={selectedSighting?.id ?? null}
-          onSelectSighting={setSelectedSighting}
-          tracks={collars.tracks}
-          individualRanges={collars.ranges}
-          showOutliers={collars.showOutliers}
-        />
-        {selectedSighting && (
-          <SightingPanel
-            sighting={selectedSighting}
-            swatch={speciesColorHex(colorIndex.get(selectedSighting.species) ?? 99, mode)}
-            onClose={() => setSelectedSighting(null)}
+    <div className="shell">
+      <AppHeader user={user} view={view} onNavigate={navigate} onSignOut={onSignOut} liveConnected={liveConnected} />
+      <div className="workspace">
+        {collarsView ? (
+          <CollarSidebar collars={collars} swatch={swatch} />
+        ) : (
+          <Sidebar
+            user={user}
+            analysable={analysable}
+            mode={mode}
+            species={species}
+            selected={selected}
+            onSelectedChange={setSelected}
+            colorIndex={colorIndex}
+            layers={layers}
+            onLayersChange={setLayers}
+            basemap={basemap}
+            onBasemapChange={setBasemap}
+            hullOptions={hullOptions}
+            onHullOptionsChange={setHullOptions}
+            onComputeHulls={computeHulls}
+            hulls={hulls}
+            hullBusy={hullBusy}
+            onCompare={runCompare}
+            comparison={comparison}
+            compareBusy={compareBusy}
+            onClearComparison={() => setComparison(null)}
+            trajectories={trajectories}
+            frontier={frontier}
+            invasiveSelected={invasiveSelected}
+            cellKm={cellKm}
+            onCellKmChange={setCellKm}
+            domain={domain}
           />
         )}
-        {error && (
-          <div className="toast" role="alert">
-            <span>{error}</span>
-            <button className="ghost" onClick={() => setError(null)} aria-label="Dismiss">
-              ×
-            </button>
+        <main className="map-pane">
+          {collarsView && <CollarSummary collars={collars} />}
+          <div className="map-frame">
+            <MapView
+              mode={mode}
+              basemap={basemap}
+              bounds={bounds}
+              layers={collarsView ? NO_LAYERS : layers}
+              visible={visible}
+              // No time bar in the collar view, so tracks show every fix.
+              windowStart={collarsView ? -Infinity : windowStart}
+              cursor={collarsView ? Infinity : cursor}
+              colorIndex={colorIndex}
+              hulls={hulls}
+              comparison={comparison}
+              trajectories={trajectories}
+              frontier={frontier}
+              density={density}
+              liveIds={liveIds}
+              selectedId={selectedSighting?.id ?? null}
+              onSelectSighting={setSelectedSighting}
+              tracks={collars.tracks}
+              individualRanges={collars.ranges}
+              showOutliers={collars.showOutliers}
+            />
+            {!collarsView && selectedSighting && (
+              <SightingPanel sighting={selectedSighting} swatch={swatch(selectedSighting.species)} onClose={() => setSelectedSighting(null)} />
+            )}
+            {error && (
+              <div className="toast" role="alert">
+                <span>{error}</span>
+                <button className="ghost" onClick={() => setError(null)} aria-label="Dismiss">
+                  ×
+                </button>
+              </div>
+            )}
+            {loading && <div className="loading-pill">Loading sightings…</div>}
           </div>
-        )}
-        {loading && <div className="loading-pill">Loading sightings…</div>}
-        <TimeBar
-          sightings={sightings}
-          domain={domain}
-          cursor={cursor}
-          windowStart={windowStart}
-          onCursorChange={(c) => {
-            setPlaying(false);
-            setCursor(c);
-          }}
-          playing={playing}
-          onTogglePlay={togglePlay}
-          speed={speed}
-          onSpeedChange={setSpeed}
-          windowDays={windowDays}
-          onWindowDaysChange={setWindowDays}
-          visibleCount={visible.length}
-        />
-      </main>
+          {!collarsView && (
+            <TimeBar
+              sightings={sightings}
+              domain={domain}
+              cursor={cursor}
+              windowStart={windowStart}
+              onCursorChange={(c) => {
+                setPlaying(false);
+                setCursor(c);
+              }}
+              playing={playing}
+              onTogglePlay={togglePlay}
+              speed={speed}
+              onSpeedChange={setSpeed}
+              windowDays={windowDays}
+              onWindowDaysChange={setWindowDays}
+              visibleCount={visible.length}
+            />
+          )}
+        </main>
+      </div>
     </div>
   );
 }
