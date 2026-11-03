@@ -115,7 +115,7 @@ pnpm --filter @biosphere/api user:create -- --email ana@park.org --name "Ana M."
 ### Admin console
 
 Admins have an **Admin** item in the portal's top bar, which opens `/admin`. It has three tabs:
-- **Accounts:** create staff accounts, change roles, and disable or re-enable users. Role changes and disabling sign the user out everywhere.
+- **Accounts:** create staff accounts, change roles, and disable or re-enable users. Role changes and disabling sign the user out everywhere. **Sign out everywhere** does that alone, without changing the account (for example after a lost phone).
 - **Species registry:** toggle invasive and sensitive. You can also mark a species sensitive *before* its first sighting is recorded. Turning protection off asks for confirmation. Changing the invasive flag also updates that species' existing sightings.
 - **Audit log:** every account and registry change, with who made it and the before/after values.
 
@@ -175,8 +175,8 @@ Individually identified animals live in `individuals`, and their collar fixes in
 
 In the portal, staff get a **Collared animals** view in the top bar:
 - Selecting an animal flies the map to its full track and shows its range, core area, fix count, removed outliers and daily distance above the map.
-- Researchers and admins can import a Movebank CSV for the selected animal. Overlapping downloads are safe to re-import.
-- A bandwidth slider scales the KDE bandwidth (× h<sub>ref</sub>), and the map redraws the range as it changes.
+- Researchers and admins can **register a collared animal** (field code, species, optional name, sex and collar ID) and import a Movebank CSV for the selected animal. The track appears as soon as the import finishes. Overlapping downloads are safe to re-import.
+- A bandwidth slider scales the KDE bandwidth (× h<sub>ref</sub>). Ranges are recomputed once dragging pauses.
 - Selected tracks stay on the Map view too. There they follow the time window, so playback animates them alongside sightings.
 - Each animal's code is labelled at its latest position, because two animals can share a species colour.
 - You can show each animal's 95% home range with its shaded 50% core, as KDE (default) or MCP, and show the rejected GPS fixes as rings.
@@ -219,6 +219,7 @@ All list endpoints accept these filters: `species` (comma-separated), `from` and
 | `POST` | `/auth/logout-all` | Revokes every token issued to the caller (e.g. after losing a phone). |
 | `GET` · `POST` | `/auth/users` | Admin only: list accounts, or create a staff account with any role. |
 | `PATCH` | `/auth/users/:id` | Admin only: change `role` or set `disabled`. Either revokes that user's tokens. |
+| `POST` | `/auth/users/:id/logout-all` | Admin only: revoke every token the user holds, without changing the account (audited). |
 | `PUT` | `/observations/:id/photos/:photoId` | Multipart `photo` upload by the sighting's observer (or an admin). Idempotent on the client-generated `photoId`. |
 | `GET` | `/observations/:id/photos` · `/photos/:photoId[?size=thumb]` | List or fetch photos (JPEG). Citizens get 403 for sensitive species. |
 | `DELETE` | `/photos/:photoId` | Remove a photo (observer or admin). |

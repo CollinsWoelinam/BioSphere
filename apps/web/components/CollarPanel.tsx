@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { Collars } from "@/lib/useCollars";
 import { fmtDate, fmtNum } from "@/lib/format";
 import { Section } from "./Sidebar";
@@ -8,7 +8,16 @@ import { Section } from "./Sidebar";
 const SEX = { F: "Female", M: "Male", U: "Sex unknown" } as const;
 
 /** Sidebar of the Collared animals view: the individuals and the home-range settings. */
-export function CollarSidebar({ collars, swatch }: { collars: Collars; swatch: (species: string) => string }) {
+export function CollarSidebar({
+  collars,
+  swatch,
+  speciesNames,
+}: {
+  collars: Collars;
+  swatch: (species: string) => string;
+  /** Known species, offered as suggestions when registering an animal. */
+  speciesNames: string[];
+}) {
   const c = collars;
   return (
     <aside className="sidebar" aria-label="Collared animals">
@@ -47,6 +56,7 @@ export function CollarSidebar({ collars, swatch }: { collars: Collars; swatch: (
           );
         })}
       </ul>
+      {c.canImport && <RegisterIndividual collars={c} speciesNames={speciesNames} />}
       <Section title="Home range">
         <div className="segmented" role="radiogroup" aria-label="Home-range method">
           <button role="radio" aria-checked={c.rangeMethod === "kde"} className={c.rangeMethod === "kde" ? "on" : ""} onClick={() => c.setRangeMethod("kde")}>
@@ -72,6 +82,82 @@ export function CollarSidebar({ collars, swatch }: { collars: Collars; swatch: (
         </label>
       </Section>
     </aside>
+  );
+}
+
+const EMPTY = { code: "", name: "", species_name: "", sex: "U" as "F" | "M" | "U", collar_id: "" };
+
+/** Researchers and admins register a newly collared animal; its fixes are imported afterwards. */
+function RegisterIndividual({ collars, speciesNames }: { collars: Collars; speciesNames: string[] }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(EMPTY);
+  const [busy, setBusy] = useState(false);
+  const set = (k: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setForm({ ...form, [k]: e.target.value });
+
+  if (!open) {
+    return (
+      <div className="pad register-toggle">
+        <button className="secondary" onClick={() => setOpen(true)}>Register a collared animal</button>
+      </div>
+    );
+  }
+  return (
+    <Section title="Register a collared animal">
+      <form
+        className="register-form"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setBusy(true);
+          const ok = await collars.createIndividual({
+            code: form.code.trim(),
+            species_name: form.species_name.trim(),
+            name: form.name.trim() || undefined,
+            sex: form.sex,
+            collar_id: form.collar_id.trim() || undefined,
+          });
+          setBusy(false);
+          if (ok) {
+            setForm(EMPTY);
+            setOpen(false);
+          }
+        }}
+      >
+        <label className="field">
+          Field code
+          <input value={form.code} onChange={set("code")} placeholder="e.g. E-031" maxLength={32} required />
+        </label>
+        <label className="field">
+          Species (scientific name)
+          <input value={form.species_name} onChange={set("species_name")} list="known-species" maxLength={100} required />
+          <datalist id="known-species">
+            {speciesNames.map((n) => <option key={n} value={n} />)}
+          </datalist>
+        </label>
+        <label className="field">
+          Name <span className="muted">(optional)</span>
+          <input value={form.name} onChange={set("name")} maxLength={100} />
+        </label>
+        <div className="register-row">
+          <label className="field">
+            Sex
+            <select value={form.sex} onChange={set("sex")}>
+              <option value="F">Female</option>
+              <option value="M">Male</option>
+              <option value="U">Unknown</option>
+            </select>
+          </label>
+          <label className="field">
+            Collar ID <span className="muted">(optional)</span>
+            <input value={form.collar_id} onChange={set("collar_id")} maxLength={64} />
+          </label>
+        </div>
+        <div className="register-row">
+          <button className="primary" disabled={busy}>{busy ? "Registering…" : "Register"}</button>
+          <button type="button" className="secondary" onClick={() => setOpen(false)}>Cancel</button>
+        </div>
+      </form>
+    </Section>
   );
 }
 
