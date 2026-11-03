@@ -148,6 +148,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (res.status === 401 && token) onUnauthorized();
     throw new ApiError(body.error ?? `${res.status} ${res.statusText}`, res.status);
   }
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
@@ -189,6 +190,8 @@ export const admin = {
     request<Account>("/auth/users", json("POST", u)),
   updateUser: (id: string, patch: { role?: Role; disabled?: boolean }) =>
     request<Account>(`/auth/users/${id}`, json("PATCH", patch)),
+  /** Revokes every token the user holds, signing them out on all devices. */
+  logoutAll: (id: string) => request<void>(`/auth/users/${id}/logout-all`, { method: "POST" }),
   species: () => request<RegistryEntry[]>("/admin/species"),
   updateSpecies: (name: string, patch: { is_invasive?: boolean; is_sensitive?: boolean }) =>
     request<RegistryEntry>(`/admin/species/${encodeURIComponent(name)}`, json("PUT", patch)),
@@ -244,6 +247,8 @@ export interface IndividualRange {
 
 export const telemetry = {
   individuals: () => request<Individual[]>("/individuals"),
+  createIndividual: (ind: { code: string; species_name: string; name?: string; sex: "F" | "M" | "U"; collar_id?: string }) =>
+    request<Individual>("/individuals", json("POST", ind)),
   track: (id: string) => request<Track>(`/individuals/${id}/track`),
   homeRange: (id: string, method: RangeMethod, hScale = 1) =>
     request<IndividualRange>(`/individuals/${id}/home-range?method=${method}&core=95&h_scale=${hScale}`),

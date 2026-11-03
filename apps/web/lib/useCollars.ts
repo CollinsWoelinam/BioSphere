@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { telemetry, type Individual, type IndividualRange, type RangeMethod, type SessionUser, type Track } from "./api";
 
 /** Collar telemetry state for staff viewers. Citizens never request it (the API would 403). */
@@ -90,13 +90,38 @@ export function useCollars(user: SessionUser) {
     },
     [recompute, hScale],
   );
-  /** Bandwidth multiplier on h_ref; only affects KDE ranges. */
+  /**
+   * Bandwidth multiplier on h_ref; only affects KDE ranges. The slider updates at once, but
+   * ranges are recomputed only once dragging pauses, not for every step.
+   */
+  const hTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const setHScale = useCallback(
     (h: number) => {
       setHScaleState(h);
-      if (rangeMethod === "kde") return recompute(rangeMethod, h);
+      clearTimeout(hTimer.current);
+      if (rangeMethod === "kde") hTimer.current = setTimeout(() => recompute(rangeMethod, h), 350);
     },
     [recompute, rangeMethod],
+  );
+  useEffect(() => () => clearTimeout(hTimer.current), []);
+
+  /** Registers a newly collared animal (researchers and admins) and selects it. */
+  const createIndividual = useCallback(
+    async (ind: Parameters<typeof telemetry.createIndividual>[0]) => {
+      setError(null);
+      setNotice(null);
+      try {
+        const created = await telemetry.createIndividual(ind);
+        await loadIndividuals();
+        setFocused(created.id);
+        setNotice(`Registered ${created.code}. Import its collar data to see its track.`);
+        return true;
+      } catch (e) {
+        setError((e as Error).message);
+        return false;
+      }
+    },
+    [loadIndividuals],
   );
 
   const importFixes = useCallback(
@@ -111,13 +136,15 @@ export function useCollars(user: SessionUser) {
             (r.rejected ? `, ${r.rejected} rejected` : ""),
         );
         await loadIndividuals();
-        if (tracks[id]) await loadTrack(id);
+        // Show the (new or extended) track straight away, even for a just-registered animal.
+        setSelected((prev) => new Set(prev).add(id));
+        await loadTrack(id);
         if (ranges[id]) setRanges({ ...ranges, [id]: await telemetry.homeRange(id, rangeMethod, hScale) });
       } catch (e) {
         setError((e as Error).message);
       }
     },
-    [loadIndividuals, loadTrack, tracks, ranges, rangeMethod, hScale],
+    [loadIndividuals, loadTrack, ranges, rangeMethod, hScale],
   );
 
   return {
@@ -138,6 +165,7 @@ export function useCollars(user: SessionUser) {
     showOutliers,
     setShowOutliers,
     importFixes,
+    createIndividual,
     error,
     notice,
   };

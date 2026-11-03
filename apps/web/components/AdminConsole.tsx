@@ -54,6 +54,17 @@ function Accounts({ me, run }: { me: SessionUser; run: Run }) {
   const load = useCallback(() => run(admin.users).then((u) => u && setUsers(u)), [run]);
   useEffect(() => void load(), [load]);
 
+  const [notice, setNotice] = useState<string | null>(null);
+  const signOutEverywhere = async (u: Account) => {
+    if (!confirm(`Sign ${u.email} out on every device? Their role and access stay the same.`)) return;
+    setNotice(null);
+    const ok = await run(async () => {
+      await admin.logoutAll(u.id);
+      return true;
+    });
+    if (ok) setNotice(`${u.email} has been signed out everywhere.`);
+  };
+
   const update = async (u: Account, patch: { role?: Role; disabled?: boolean }) => {
     if (patch.disabled && !confirm(`Disable ${u.email}? They will be signed out on every device.`)) return;
     if (patch.role && !confirm(`Change ${u.email} to ${patch.role}? Their sessions will be signed out.`)) return;
@@ -72,6 +83,7 @@ function Accounts({ me, run }: { me: SessionUser; run: Run }) {
 
   return (
     <section className="admin-section">
+      {notice && <p className="notice" role="status">{notice}</p>}
       <form className="admin-form" onSubmit={create}>
         <h2>New staff account</h2>
         <input placeholder="Name" aria-label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
@@ -108,9 +120,16 @@ function Accounts({ me, run }: { me: SessionUser; run: Run }) {
                 <td>{new Date(u.created_at).toLocaleDateString()}</td>
                 <td className="num">
                   {!self && (
-                    <button className={u.disabled_at ? "secondary small" : "danger small"} onClick={() => update(u, { disabled: !u.disabled_at })}>
-                      {u.disabled_at ? "Enable" : "Disable"}
-                    </button>
+                    <span className="row-actions">
+                      {!u.disabled_at && (
+                        <button className="secondary small" onClick={() => signOutEverywhere(u)}>
+                          Sign out everywhere
+                        </button>
+                      )}
+                      <button className={u.disabled_at ? "secondary small" : "danger small"} onClick={() => update(u, { disabled: !u.disabled_at })}>
+                        {u.disabled_at ? "Enable" : "Disable"}
+                      </button>
+                    </span>
                   )}
                 </td>
               </tr>
