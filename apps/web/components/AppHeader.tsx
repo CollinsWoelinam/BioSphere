@@ -1,6 +1,7 @@
 "use client";
 
 import type { SessionUser } from "@/lib/api";
+import { Logo } from "./Logo";
 
 export type View = "map" | "collars" | "admin";
 
@@ -49,11 +50,7 @@ export function AppHeader({
   return (
     <header className="app-header">
       <a className="logo" href="/" aria-label="BioSphere home">
-        <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden>
-          <circle cx="16" cy="16" r="15" fill="var(--accent)" />
-          <path d="M6 19c4-1 6-6 10-6s6 5 10 6" fill="none" stroke="#b8e3c9" strokeWidth="2.2" strokeLinecap="round" />
-          <path d="M9 23c3-.6 5-3 7-3s4 2.4 7 3" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
-        </svg>
+        <Logo size={32} />
         <span>BioSphere</span>
       </a>
       <nav className="app-nav" aria-label="Portal">

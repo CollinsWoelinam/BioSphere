@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <style>.r{stroke:#1F5E4B}@media (prefers-color-scheme:dark){.r{stroke:#5DD39E}}</style>
+  <circle class="r" cx="60" cy="60" r="48" fill="none" stroke-width="20"/>
+  <circle cx="60" cy="60" r="18" fill="#E08A1E"/>
+</svg>

@@ -15,6 +15,7 @@
   --accent-soft: #e3eee9;
   --accent-soft-ink: #123d30;
   --accent-ink: #ffffff;
+  --logo-core: #e08a1e;
   --bar: #c9d3ce;
   --bar-active: #1f5e4b;
   --window: rgba(31, 94, 75, 0.1);
@@ -54,6 +55,7 @@
     --accent-soft: #1d3a30;
     --accent-soft-ink: #b8e3c9;
     --accent-ink: #0e1714;
+    --logo-core: #f5b26b;
     --bar: #34493f;
     --bar-active: #5dd39e;
     --window: rgba(93, 211, 158, 0.14);

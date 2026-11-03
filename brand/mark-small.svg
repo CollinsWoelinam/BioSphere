@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="BioSphere">
+  <g fill="none" stroke="#1F5E4B" stroke-width="13" stroke-linejoin="round">
+    <circle cx="60" cy="60" r="51"/>
+    <path d="M60 30 C80 30 92 44 90 62 C88 80 74 90 58 89 C42 88 31 76 32 60 C33 44 42 30 60 30Z"/>
+  </g>
+  <circle cx="61" cy="60" r="11" fill="#E08A1E"/>
+</svg>
