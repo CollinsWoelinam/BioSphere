@@ -101,4 +101,16 @@ export async function authRoutes(app: FastifyInstance) {
     if (!user) return reply.code(404).send({ error: "User not found" });
     return user;
   });
+
+  /** Signs a user out on every device (e.g. a lost phone) without changing their role. */
+  app.post("/auth/users/:id/logout-all", adminOnly, async (req, reply) => {
+    const { id } = z.object({ id: z.uuid() }).parse(req.params);
+    const found = await sql.begin(async (tx) => {
+      const [u] = await tx<User[]>`UPDATE users SET token_version = token_version + 1 WHERE id = ${id} RETURNING email`;
+      if (u) await audit(tx as unknown as typeof sql, req.user.sub, "user.logout_all", u.email, {});
+      return u;
+    });
+    if (!found) return reply.code(404).send({ error: "User not found" });
+    return reply.code(204).send();
+  });
 }

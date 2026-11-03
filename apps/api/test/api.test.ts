@@ -26,8 +26,12 @@ const point = (lon: number, lat: number, day: number, species = SPECIES, id = ra
 
 const photoIds: string[] = [];
 
+// Each helper sign-in comes from its own client address, so fixture logins never use up
+// the per-IP sign-in rate limit that the tests themselves exercise.
+let clients = 0;
 async function login(email: string) {
-  const res = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password: PASSWORD } });
+  const remoteAddress = `10.99.${Math.floor(++clients / 250)}.${clients % 250}`;
+  const res = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password: PASSWORD }, remoteAddress });
   return res.json().token as string;
 }
 
@@ -71,8 +75,7 @@ before(async () => {
   for (const role of ["ADMIN", "RESEARCHER", "RANGER", "CITIZEN"] as Role[]) {
     const email = `${role.toLowerCase()}-${RUN}@test.local`;
     await createUser(sql, { email, name: role, role, password: PASSWORD });
-    const res = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password: PASSWORD } });
-    tokens[role] = res.json().token;
+    tokens[role] = await login(email);
   }
   await sql`INSERT INTO species (species_name, is_sensitive) VALUES (${SENSITIVE}, TRUE)`;
 });
@@ -139,6 +142,17 @@ describe("revocation", () => {
     assert.equal((await app.inject({ method: "POST", url: "/auth/logout-all", headers: bearer(u.token) })).statusCode, 204);
     assert.equal((await app.inject({ url: "/auth/me", headers: bearer(u.token) })).statusCode, 401);
     assert.equal((await app.inject({ url: "/auth/me", headers: bearer(await login(u.email)) })).statusCode, 200);
+  });
+
+  test("admins can sign another user out everywhere, keeping their role", async () => {
+    const u = await account("RANGER", "remote-logout");
+    const signOut = (headers: Record<string, string>) =>
+      app.inject({ method: "POST", url: `/auth/users/${u.id}/logout-all`, headers });
+    assert.equal((await signOut(as("RANGER"))).statusCode, 403);
+    assert.equal((await signOut(as("ADMIN"))).statusCode, 204);
+    assert.equal((await app.inject({ url: "/auth/me", headers: bearer(u.token) })).statusCode, 401);
+    const again = await app.inject({ url: "/auth/me", headers: bearer(await login(u.email)) });
+    assert.equal(again.json().role, "RANGER");
   });
 
   test("role changes apply immediately and disabling blocks sign-in", async () => {

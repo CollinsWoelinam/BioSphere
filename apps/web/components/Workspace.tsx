@@ -336,7 +336,7 @@ export function Workspace({ user, onSignOut }: { user: SessionUser; onSignOut: (
       <AppHeader user={user} view={view} onNavigate={navigate} onSignOut={onSignOut} liveConnected={liveConnected} />
       <div className="workspace">
         {collarsView ? (
-          <CollarSidebar collars={collars} swatch={swatch} />
+          <CollarSidebar collars={collars} swatch={swatch} speciesNames={species.map((s) => s.species_name)} />
         ) : (
           <Sidebar
             user={user}
