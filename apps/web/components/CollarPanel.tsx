@@ -135,7 +135,7 @@ function RegisterIndividual({ collars, speciesNames }: { collars: Collars; speci
           </datalist>
         </label>
         <label className="field">
-          Name <span className="muted">(optional)</span>
+          <span>Name <span className="muted">(optional)</span></span>
           <input value={form.name} onChange={set("name")} maxLength={100} />
         </label>
         <div className="register-row">
@@ -148,7 +148,7 @@ function RegisterIndividual({ collars, speciesNames }: { collars: Collars; speci
             </select>
           </label>
           <label className="field">
-            Collar ID <span className="muted">(optional)</span>
+            <span>Collar ID <span className="muted">(optional)</span></span>
             <input value={form.collar_id} onChange={set("collar_id")} maxLength={64} />
           </label>
         </div>
